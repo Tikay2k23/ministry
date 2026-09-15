@@ -1,0 +1,74 @@
+@import 'tailwindcss';
+
+/*
+ * GenTouch design tokens — docs/04-user-experience.md §2 (Brand).
+ * Values are approximations from the supplied logo; replace with the designer's exact values.
+ */
+@theme {
+  --color-ground: #fafaf7;
+  --color-surface: #ffffff;
+  --color-ink: #1f2328;
+  --color-muted: #5c6370;
+  --color-line: #e4e4de;
+  --color-line-strong: #cfcfc7;
+
+  --color-brand-deep: #1f5f24;
+  --color-brand-deep-hover: #174a1c;
+  --color-brand-leaf: #7cc63a;
+  --color-brand-leaf-tint: #eef7e4;
+  --color-brand-touch: #e3261e; /* logo only */
+
+  --color-error: #b42318;
+  --color-error-tint: #fef3f2;
+  --color-warn: #8a5a00;
+  --color-warn-tint: #fbf3e2;
+  --color-info: #3b5b7a;
+  --color-info-tint: #eef3f8;
+
+  --color-status-received: #1f5f24;
+  --color-status-late: #b7862c;
+  --color-status-notyet: #8a8f98;
+  --color-status-missed: #a0674f;
+  --color-status-excused: #6b7a8f;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-nunito), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 10px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brand-deep);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

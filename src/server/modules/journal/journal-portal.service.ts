@@ -1,0 +1,563 @@
+import { and, asc, desc, eq, gte, inArray, lte, ne, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
+import { z } from 'zod';
+import { actorUserId, type RequestContext } from '../../context/request-context';
+import { queryRows, type Database } from '../../db/client';
+import type { Sensitivity } from '../../db/enums';
+import {
+  careFollowups,
+  formAnswerSets,
+  formResponses,
+  journalDays,
+  journalEntries,
+  journalReviews,
+  people,
+  users,
+} from '../../db/schema';
+import { forbidden, notFound } from '../../errors';
+import { assertCanAccessPerson, assertPermission, canAccessPerson, personScopeFilter } from '../../policy/can';
+import { parseInput } from '../../validation';
+import { recordAudit } from '../audit/audit.service';
+import { answerToText, type AnswerValue } from '../forms/answers';
+import { getFormVersion } from '../forms/forms.service';
+import { displayName } from '../people/people.queries';
+import { getSetting } from '../settings/settings.service';
+import { resolveContentAccess, visibleTiers } from './content-access';
+import { addDays, localDate } from './journal-dates';
+import { ensureJournalLedger } from './ledger.service';
+
+/**
+ * Portal journal views (docs/04 §5, docs/05 W5). Status comes from the narrow ledger and is
+ * scoped by journal.status.view; answers are loaded only per permitted sensitivity tier.
+ */
+
+const PAGE_SIZE = 50;
+const REVIEW_WINDOW_DAYS = 14;
+
+type DayStatus = (typeof journalDays.$inferSelect)['submissionStatus'];
+
+const optionalText = (max: number) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().trim().max(max).optional());
+
+async function ministryToday(db: Database, now: Date) {
+  const { timezone } = await getSetting(db, 'ministry.profile');
+  return { timezone, today: localDate(now, timezone) };
+}
+
+async function leadsAnyone(db: Database, personId: string) {
+  const [row] = await queryRows<{ leads: boolean }>(
+    db,
+    sql`SELECT EXISTS (SELECT 1 FROM hierarchy_nodes WHERE parent_person_id = ${personId}::uuid) AS leads`,
+  );
+  return row?.leads === true;
+}
+
+// ─── Today / any day overview ─────────────────────────────────────────────────
+
+export const JOURNAL_STATUS_FILTERS = ['all', 'received', 'late', 'not_yet', 'missed', 'excused', 'awaiting_review'] as const;
+export type JournalStatusFilter = (typeof JOURNAL_STATUS_FILTERS)[number];
+export type JournalView = 'direct' | 'branch' | 'all';
+
+export const JournalOverviewInput = z.object({
+  date: z.iso.date().optional().catch(undefined),
+  leaderId: z.uuid().optional().catch(undefined),
+  view: z.enum(['direct', 'branch', 'all']).optional().catch(undefined),
+  status: z.enum(JOURNAL_STATUS_FILTERS).catch('all'),
+  page: z.coerce.number().int().min(1).max(10_000).catch(1),
+});
+
+function statusCondition(status: JournalStatusFilter): SQL | undefined {
+  switch (status) {
+    case 'received':
+      return sql`${journalDays.submissionStatus} IN ('submitted', 'late')`;
+    case 'late':
+      return eq(journalDays.submissionStatus, 'late');
+    case 'not_yet':
+      return eq(journalDays.submissionStatus, 'pending');
+    case 'missed':
+      return eq(journalDays.submissionStatus, 'missed');
+    case 'excused':
+      return eq(journalDays.submissionStatus, 'excused');
+    case 'awaiting_review':
+      return eq(journalDays.reviewStatus, 'awaiting');
+    case 'all':
+      return undefined;
+  }
+}
+
+export async function getJournalOverview(db: Database, ctx: RequestContext, raw: unknown) {
+  assertPermission(ctx, 'journal.status.view');
+  const input = parseInput(JournalOverviewInput, raw ?? {});
+  await ensureJournalLedger(db, ctx.now);
+  const { today } = await ministryToday(db, ctx.now);
+  const date = input.date && input.date <= today ? input.date : today;
+  const selfId = ctx.actor.kind === 'user' ? ctx.actor.personId : null;
+
+  let leaderId: string | null = null;
+  if (input.view !== 'all') {
+    if (input.leaderId) {
+      await assertCanAccessPerson(db, ctx, 'journal.status.view', input.leaderId);
+      leaderId = input.leaderId;
+    } else if (selfId && (await leadsAnyone(db, selfId)) && (await canAccessPerson(db, ctx, 'journal.status.view', selfId))) {
+      leaderId = selfId;
+    }
+  }
+  const view: JournalView = !leaderId ? 'all' : input.view === 'branch' ? 'branch' : 'direct';
+
+  const conditions: SQL[] = [
+    eq(journalDays.journalDate, date),
+    sql`(${journalDays.isExpected} OR ${journalDays.entryId} IS NOT NULL)`,
+    personScopeFilter(ctx, 'journal.status.view', journalDays.personId),
+  ];
+  if (view === 'direct') conditions.push(eq(journalDays.leaderPersonId, leaderId!));
+  if (view === 'branch') conditions.push(sql`${journalDays.hierarchyPath} @> ARRAY[${leaderId}]::uuid[]`);
+  const where = and(...conditions)!;
+
+  const countWhere = (condition: SQL) => sql<number>`count(*) FILTER (WHERE ${condition})`.mapWith(Number);
+  const [summary] = await db
+    .select({
+      total: sql<number>`count(*)`.mapWith(Number),
+      expected: countWhere(sql`${journalDays.isExpected}`),
+      received: countWhere(sql`${journalDays.submissionStatus} IN ('submitted', 'late')`),
+      late: countWhere(sql`${journalDays.submissionStatus} = 'late'`),
+      notYet: countWhere(sql`${journalDays.submissionStatus} = 'pending'`),
+      missed: countWhere(sql`${journalDays.submissionStatus} = 'missed'`),
+      excused: countWhere(sql`${journalDays.submissionStatus} = 'excused'`),
+      awaitingReview: countWhere(sql`${journalDays.reviewStatus} = 'awaiting'`),
+      needsCare: countWhere(sql`${journalDays.careStatus} = 'needs_follow_up'`),
+    })
+    .from(journalDays)
+    .where(where);
+
+  const leader = alias(people, 'leader');
+  const filter = statusCondition(input.status);
+  const rows = await db
+    .select({
+      personId: journalDays.personId,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      preferredName: people.preferredName,
+      status: journalDays.submissionStatus,
+      reviewStatus: journalDays.reviewStatus,
+      careStatus: journalDays.careStatus,
+      excuseReason: journalDays.excuseReason,
+      isExpected: journalDays.isExpected,
+      receivedAt: journalEntries.firstSubmittedAt,
+      channel: journalEntries.channel,
+      leaderFirstName: leader.firstName,
+      leaderLastName: leader.lastName,
+    })
+    .from(journalDays)
+    .innerJoin(people, eq(people.id, journalDays.personId))
+    .leftJoin(journalEntries, eq(journalEntries.id, journalDays.entryId))
+    .leftJoin(leader, eq(leader.id, journalDays.leaderPersonId))
+    .where(filter ? and(where, filter) : where)
+    .orderBy(
+      sql`CASE ${journalDays.submissionStatus} WHEN 'pending' THEN 0 WHEN 'missed' THEN 1 WHEN 'late' THEN 2 WHEN 'submitted' THEN 3 ELSE 4 END`,
+      asc(people.lastName),
+      asc(people.firstName),
+      asc(people.id),
+    )
+    .limit(PAGE_SIZE)
+    .offset((input.page - 1) * PAGE_SIZE);
+
+  // Seven-day dots for the people on this page.
+  const from = addDays(date, -6);
+  const history = rows.length
+    ? await db
+        .select({ personId: journalDays.personId, journalDate: journalDays.journalDate, status: journalDays.submissionStatus })
+        .from(journalDays)
+        .where(
+          and(
+            inArray(
+              journalDays.personId,
+              rows.map((r) => r.personId),
+            ),
+            gte(journalDays.journalDate, from),
+            lte(journalDays.journalDate, date),
+          ),
+        )
+    : [];
+  const historyByPerson = new Map<string, Map<string, DayStatus>>();
+  for (const h of history) {
+    if (!historyByPerson.has(h.personId)) historyByPerson.set(h.personId, new Map());
+    historyByPerson.get(h.personId)!.set(h.journalDate, h.status);
+  }
+  const weekDates = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+
+  // Groups led by the leader's direct members (one level down), counted over their whole branch.
+  const groups = leaderId
+    ? await queryRows<{ id: string; first_name: string; last_name: string; preferred_name: string | null; expected: number; received: number; not_yet: number; missed: number }>(
+        db,
+        sql`SELECT n.person_id AS id, p.first_name, p.last_name, p.preferred_name,
+                   count(d.person_id) FILTER (WHERE d.is_expected)::int AS expected,
+                   count(d.person_id) FILTER (WHERE d.submission_status IN ('submitted', 'late'))::int AS received,
+                   count(d.person_id) FILTER (WHERE d.submission_status = 'pending')::int AS not_yet,
+                   count(d.person_id) FILTER (WHERE d.submission_status = 'missed')::int AS missed
+              FROM hierarchy_nodes n
+              JOIN people p ON p.id = n.person_id
+              LEFT JOIN journal_days d
+                ON d.journal_date = ${date}::date
+               AND d.hierarchy_path @> ARRAY[n.person_id]
+               AND (d.is_expected OR d.entry_id IS NOT NULL)
+               AND ${personScopeFilter(ctx, 'journal.status.view', sql`d.person_id`)}
+             WHERE n.parent_person_id = ${leaderId}::uuid
+               AND EXISTS (SELECT 1 FROM hierarchy_nodes c WHERE c.parent_person_id = n.person_id)
+             GROUP BY n.person_id, p.first_name, p.last_name, p.preferred_name
+             ORDER BY p.last_name, p.first_name`,
+      )
+    : [];
+
+  const [leaderPerson] = leaderId
+    ? await db
+        .select({ firstName: people.firstName, lastName: people.lastName, preferredName: people.preferredName })
+        .from(people)
+        .where(eq(people.id, leaderId))
+    : [];
+
+  const totals: Record<JournalStatusFilter, number> = {
+    all: summary!.total,
+    received: summary!.received,
+    late: summary!.late,
+    not_yet: summary!.notYet,
+    missed: summary!.missed,
+    excused: summary!.excused,
+    awaiting_review: summary!.awaitingReview,
+  };
+
+  return {
+    date,
+    today,
+    view,
+    status: input.status,
+    leader: leaderId && leaderPerson ? { id: leaderId, name: displayName(leaderPerson), isSelf: leaderId === selfId } : null,
+    summary: summary!,
+    groups: groups.map((g) => ({
+      leaderId: g.id,
+      leaderName: displayName({ firstName: g.first_name, lastName: g.last_name, preferredName: g.preferred_name }),
+      expected: g.expected,
+      received: g.received,
+      notYet: g.not_yet,
+      missed: g.missed,
+    })),
+    people: rows.map((r) => ({
+      personId: r.personId,
+      name: displayName(r),
+      status: r.status,
+      reviewStatus: r.reviewStatus,
+      careStatus: r.careStatus,
+      excuseReason: r.excuseReason,
+      isExpected: r.isExpected,
+      receivedAt: r.receivedAt,
+      byProxy: r.channel === 'proxy',
+      leaderName: view !== 'direct' && r.leaderFirstName ? `${r.leaderFirstName} ${r.leaderLastName}` : null,
+      week: weekDates.map((d) => ({ date: d, status: historyByPerson.get(r.personId)?.get(d) ?? null })),
+    })),
+    page: input.page,
+    pageSize: PAGE_SIZE,
+    total: totals[input.status],
+  };
+}
+
+// ─── One person's journal (profile section) ───────────────────────────────────
+
+export async function getPersonJournalSummary(db: Database, ctx: RequestContext, personId: string) {
+  if (!z.uuid().safeParse(personId).success) throw notFound('person');
+  await assertCanAccessPerson(db, ctx, 'journal.status.view', personId);
+  await ensureJournalLedger(db, ctx.now);
+  const [{ today }, policy] = await Promise.all([ministryToday(db, ctx.now), getSetting(db, 'journal.policy')]);
+  const from = addDays(today, -29);
+
+  const rows = await db
+    .select({
+      journalDate: journalDays.journalDate,
+      status: journalDays.submissionStatus,
+      isExpected: journalDays.isExpected,
+      excuseReason: journalDays.excuseReason,
+      hasEntry: sql<boolean>`${journalDays.entryId} IS NOT NULL`,
+    })
+    .from(journalDays)
+    .where(and(eq(journalDays.personId, personId), gte(journalDays.journalDate, from), lte(journalDays.journalDate, today)))
+    .orderBy(asc(journalDays.journalDate));
+  const byDate = new Map(rows.map((r) => [r.journalDate, r]));
+  const received = rows.filter((r) => r.status === 'submitted' || r.status === 'late').length;
+  const counted = rows.filter((r) => r.status === 'submitted' || r.status === 'late' || (r.isExpected && r.status === 'missed')).length;
+
+  const [person] = await db
+    .select({ firstName: people.firstName, lastName: people.lastName, preferredName: people.preferredName })
+    .from(people)
+    .where(eq(people.id, personId));
+
+  const [canExcuse, canProxy] = await Promise.all([
+    canAccessPerson(db, ctx, 'journal.excuse', personId),
+    canAccessPerson(db, ctx, 'journal.proxy_submit', personId),
+  ]);
+
+  return {
+    person: { id: personId, name: person ? displayName(person) : '', firstName: person?.firstName ?? '' },
+    today,
+    days: Array.from({ length: 30 }, (_, i) => {
+      const d = addDays(from, i);
+      const r = byDate.get(d);
+      return { date: d, status: r?.status ?? null, excuseReason: r?.excuseReason ?? null, hasEntry: r?.hasEntry ?? false };
+    }),
+    consistency: policy.showStreaksToLeaders ? { received, of: counted } : null,
+    canExcuse,
+    canProxy: canProxy && !(ctx.actor.kind === 'user' && ctx.actor.personId === personId),
+  };
+}
+
+// ─── One journal entry ────────────────────────────────────────────────────────
+
+export const JournalEntryInput = z.object({ personId: z.uuid(), date: z.iso.date() });
+
+export async function getJournalEntry(db: Database, ctx: RequestContext, raw: unknown) {
+  const { personId, date } = parseInput(JournalEntryInput, raw);
+  await assertCanAccessPerson(db, ctx, 'journal.status.view', personId);
+
+  const [row] = await db
+    .select({
+      day: journalDays,
+      entry: journalEntries,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      preferredName: people.preferredName,
+    })
+    .from(journalDays)
+    .innerJoin(people, eq(people.id, journalDays.personId))
+    .leftJoin(journalEntries, eq(journalEntries.id, journalDays.entryId))
+    .where(and(eq(journalDays.personId, personId), eq(journalDays.journalDate, date)));
+  if (!row) throw notFound('journal day');
+
+  const { day, entry } = row;
+  const isOwn = ctx.actor.kind === 'user' && ctx.actor.personId === personId;
+  const [canReview, canExcuse] = await Promise.all([
+    canAccessPerson(db, ctx, 'journal.review', personId),
+    canAccessPerson(db, ctx, 'journal.excuse', personId),
+  ]);
+  const base = {
+    person: { id: personId, name: displayName(row) },
+    date,
+    status: day.submissionStatus,
+    reviewStatus: day.reviewStatus,
+    careStatus: day.careStatus,
+    excuseReason: day.excuseReason,
+    isExpected: day.isExpected,
+    finalized: day.finalizedAt !== null,
+    canExcuse,
+  };
+  if (!entry) return { ...base, canReview: false, entry: null };
+
+  const policy = await getSetting(db, 'journal.policy');
+  const access = await resolveContentAccess(db, ctx, { personId, hierarchyPath: day.hierarchyPath }, policy.contentVisibilityDepth);
+  const tiers = visibleTiers(access);
+
+  let answers: { key: string; label: string; type: string; sensitivity: Sensitivity; text: string }[] = [];
+  let hiddenCount = 0;
+  if (!entry.contentPurgedAt) {
+    // Hidden tiers are counted in SQL; their content never leaves the database.
+    const tierCounts = await queryRows<{ sensitivity: Sensitivity; answer_count: number }>(
+      db,
+      sql`SELECT sensitivity, (SELECT count(*) FROM jsonb_object_keys(answers))::int AS answer_count
+            FROM form_answer_sets WHERE response_id = ${entry.formResponseId}::uuid`,
+    );
+    hiddenCount = tierCounts.filter((t) => !tiers.includes(t.sensitivity)).reduce((n, t) => n + Number(t.answer_count), 0);
+
+    const sets = tiers.length
+      ? await db
+          .select({ answers: formAnswerSets.answers })
+          .from(formAnswerSets)
+          .where(and(eq(formAnswerSets.responseId, entry.formResponseId), inArray(formAnswerSets.sensitivity, tiers)))
+      : [];
+    if (sets.length > 0) {
+      const [response] = await db
+        .select({ formVersionId: formResponses.formVersionId })
+        .from(formResponses)
+        .where(eq(formResponses.id, entry.formResponseId));
+      const version = response ? await getFormVersion(db, response.formVersionId) : null;
+      const merged = Object.assign({}, ...sets.map((s) => s.answers as Record<string, AnswerValue>)) as Record<string, AnswerValue>;
+      answers = (version?.fields ?? []).flatMap((field) => {
+        const answer = merged[field.key];
+        return answer && tiers.includes(field.sensitivity)
+          ? [{ key: field.key, label: field.label, type: field.type, sensitivity: field.sensitivity, text: answerToText(field, answer) }]
+          : [];
+      });
+      if (!isOwn) {
+        await recordAudit(db, ctx, {
+          category: 'access',
+          action: 'journal.content_viewed',
+          entityType: 'journal_entry',
+          entityId: entry.id,
+          newValues: { personId, journalDate: date, tiers },
+        });
+      }
+    }
+  }
+
+  const userId = actorUserId(ctx);
+  const reviews = await db
+    .select({
+      reviewerUserId: journalReviews.reviewerUserId,
+      reviewerName: users.name,
+      reviewedAt: journalReviews.reviewedAt,
+      comment: journalReviews.comment,
+      shareWithPerson: journalReviews.shareWithPerson,
+      flaggedFollowUp: journalReviews.flaggedFollowUp,
+    })
+    .from(journalReviews)
+    .innerJoin(users, eq(users.id, journalReviews.reviewerUserId))
+    .where(eq(journalReviews.entryId, entry.id))
+    .orderBy(asc(journalReviews.reviewedAt));
+
+  return {
+    ...base,
+    canReview: canReview && !isOwn,
+    entry: {
+      id: entry.id,
+      receivedAt: entry.firstSubmittedAt,
+      lastEditedAt: entry.revisionNo > 1 ? entry.lastSubmittedAt : null,
+      revisionNo: entry.revisionNo,
+      timing: entry.timing,
+      byProxy: entry.channel === 'proxy',
+      purged: entry.contentPurgedAt !== null,
+      contentAllowed: tiers.length > 0,
+      answers,
+      hiddenCount,
+      reviews: reviews.map((r) => ({
+        reviewerName: r.reviewerName,
+        reviewedAt: r.reviewedAt,
+        // Leader notes share the visibility of standard answers.
+        comment: access.standard || r.reviewerUserId === userId ? r.comment : null,
+        shareWithPerson: r.shareWithPerson,
+        flaggedFollowUp: r.flaggedFollowUp,
+        mine: r.reviewerUserId === userId,
+      })),
+    },
+  };
+}
+
+// ─── Review ───────────────────────────────────────────────────────────────────
+
+export async function listAwaitingReview(db: Database, ctx: RequestContext, raw: unknown) {
+  assertPermission(ctx, 'journal.review');
+  const { page } = parseInput(z.object({ page: z.coerce.number().int().min(1).max(10_000).catch(1) }), raw ?? {});
+  await ensureJournalLedger(db, ctx.now);
+  const { today } = await ministryToday(db, ctx.now);
+  const selfId = ctx.actor.kind === 'user' ? ctx.actor.personId : null;
+
+  const where = and(
+    eq(journalDays.reviewStatus, 'awaiting'),
+    gte(journalDays.journalDate, addDays(today, -(REVIEW_WINDOW_DAYS - 1))),
+    personScopeFilter(ctx, 'journal.review', journalDays.personId),
+    selfId ? ne(journalDays.personId, selfId) : undefined,
+  );
+  const rows = await db
+    .select({
+      personId: journalDays.personId,
+      journalDate: journalDays.journalDate,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      preferredName: people.preferredName,
+      receivedAt: journalEntries.firstSubmittedAt,
+      timing: journalEntries.timing,
+    })
+    .from(journalDays)
+    .innerJoin(people, eq(people.id, journalDays.personId))
+    .innerJoin(journalEntries, eq(journalEntries.id, journalDays.entryId))
+    .where(where)
+    .orderBy(desc(journalDays.journalDate), asc(journalEntries.firstSubmittedAt))
+    .limit(PAGE_SIZE)
+    .offset((page - 1) * PAGE_SIZE);
+  const [count] = await db
+    .select({ total: sql<number>`count(*)`.mapWith(Number) })
+    .from(journalDays)
+    .where(where);
+
+  return {
+    items: rows.map((r) => ({
+      personId: r.personId,
+      name: displayName(r),
+      journalDate: r.journalDate,
+      receivedAt: r.receivedAt,
+      timing: r.timing,
+    })),
+    total: count?.total ?? 0,
+    page,
+    pageSize: PAGE_SIZE,
+  };
+}
+
+export const ReviewInput = z.object({
+  entryId: z.uuid(),
+  comment: optionalText(2000),
+  shareWithPerson: z.boolean().default(false),
+  followUp: z.enum(['none', 'leadership', 'pastoral']).default('none'),
+});
+
+export async function reviewJournalEntry(db: Database, ctx: RequestContext, raw: unknown) {
+  const input = parseInput(ReviewInput, raw);
+  return db.transaction(async (tx) => {
+    const [entry] = await tx
+      .select({ id: journalEntries.id, personId: journalEntries.personId, journalDate: journalEntries.journalDate })
+      .from(journalEntries)
+      .where(eq(journalEntries.id, input.entryId));
+    if (!entry) throw notFound('journal entry');
+    await assertCanAccessPerson(tx, ctx, 'journal.review', entry.personId);
+    const userId = actorUserId(ctx)!;
+    const selfId = ctx.actor.kind === 'user' ? ctx.actor.personId : null;
+    if (selfId === entry.personId) throw forbidden('You can’t review your own journal.');
+
+    const values = {
+      reviewedAt: ctx.now,
+      comment: input.comment ?? null,
+      shareWithPerson: input.shareWithPerson,
+      flaggedFollowUp: input.followUp !== 'none',
+    };
+    await tx
+      .insert(journalReviews)
+      .values({ entryId: entry.id, reviewerUserId: userId, ...values })
+      .onConflictDoUpdate({ target: [journalReviews.entryId, journalReviews.reviewerUserId], set: values });
+    await tx
+      .update(journalDays)
+      .set({ reviewStatus: 'reviewed', updatedAt: ctx.now })
+      .where(eq(journalDays.entryId, entry.id));
+
+    let followUpId: string | null = null;
+    if (input.followUp !== 'none') {
+      const [node] = await queryRows<{ parent_person_id: string | null }>(
+        tx,
+        sql`SELECT parent_person_id FROM hierarchy_nodes WHERE person_id = ${entry.personId}::uuid`,
+      );
+      const [created] = await tx
+        .insert(careFollowups)
+        .values({
+          personId: entry.personId,
+          kind: 'journal_flagged',
+          sourceType: 'journal_entry',
+          sourceRef: entry.id,
+          // Pastoral follow-ups go to the pastoral pool; leadership ones to whoever flagged it.
+          assignedToPersonId: input.followUp === 'pastoral' ? null : (selfId ?? node?.parent_person_id ?? null),
+          visibility: input.followUp,
+          summary: `Flagged while reviewing the journal for ${entry.journalDate}`,
+          dedupeKey: `journal_flag:${entry.id}:${input.followUp}`,
+          createdBy: userId,
+        })
+        .onConflictDoNothing()
+        .returning({ id: careFollowups.id });
+      followUpId = created?.id ?? null;
+      await tx
+        .update(journalDays)
+        .set({ careStatus: 'needs_follow_up', updatedAt: ctx.now })
+        .where(eq(journalDays.entryId, entry.id));
+    }
+
+    await recordAudit(tx, ctx, {
+      category: 'change',
+      action: 'journal.reviewed',
+      entityType: 'journal_entry',
+      entityId: entry.id,
+      newValues: { followUp: input.followUp, shareWithPerson: input.shareWithPerson, hasComment: Boolean(input.comment) },
+    });
+    return { followUpId };
+  });
+}
