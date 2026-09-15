@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newPersonCode } from '@/lib/ids';
 import { queryRows, type DatabaseHandle } from '@/server/db/client';
@@ -81,5 +81,52 @@ describe('database foundation', () => {
     await expect(
       handle.db.insert(users).values({ email: 'leader@example.org', name: 'Duplicate' }),
     ).rejects.toThrow();
+  });
+});
+
+describe('row-level security (migration 0007)', () => {
+  beforeAll(async () => {
+    await handle.db.execute(sql`CREATE ROLE rls_outsider NOLOGIN`);
+    await handle.db.execute(sql`GRANT SELECT ON people, audit_logs TO rls_outsider`);
+    await handle.db.execute(sql`CREATE ROLE rls_app_login NOLOGIN IN ROLE gentouch_app`);
+    await handle.db.insert(people).values(basePerson());
+  });
+
+  const runAs = (role: 'rls_outsider' | 'rls_app_login', statement: SQL) =>
+    handle.db.transaction(async (tx) => {
+      await tx.execute(sql.raw(`SET LOCAL ROLE ${role}`));
+      return queryRows<Record<string, unknown>>(tx, statement);
+    });
+
+  const errorCode = (promise: Promise<unknown>) =>
+    promise.then(
+      () => null,
+      (error: { code?: string; cause?: { code?: string } }) => error.cause?.code ?? error.code ?? 'unknown',
+    );
+
+  it('enables RLS on every table, each with a policy for the application role', async () => {
+    const tables = await queryRows<{ table_name: string; rls: boolean; app_policy: boolean }>(
+      handle.db,
+      sql`SELECT c.relname AS table_name, c.relrowsecurity AS rls,
+                 EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid AND p.polname = 'gentouch_app_full_access') AS app_policy
+            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`,
+    );
+    expect(tables.length).toBeGreaterThan(50);
+    // A new table needs both in its migration — see the note at the top of drizzle/0007_row_level_security.sql.
+    expect(tables.filter((t) => !t.rls || !t.app_policy).map((t) => t.table_name)).toEqual([]);
+  });
+
+  it('shows no rows to a role without a policy, even with table privileges', async () => {
+    expect(await runAs('rls_outsider', sql`SELECT id FROM people`)).toEqual([]);
+  });
+
+  it('lets members of the application role work normally', async () => {
+    expect((await runAs('rls_app_login', sql`SELECT id FROM people`)).length).toBeGreaterThan(0);
+  });
+
+  it('keeps audit entries insert-only for the application role', async () => {
+    expect(await errorCode(runAs('rls_app_login', sql`UPDATE audit_logs SET action = action`))).toBe('42501');
+    expect(await errorCode(runAs('rls_app_login', sql`DELETE FROM audit_logs`))).toBe('42501');
   });
 });

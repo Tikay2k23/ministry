@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /*
  * GenTouch design tokens — docs/04-user-experience.md §2 (Brand).
@@ -35,6 +36,41 @@
   --font-display: var(--font-nunito), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 10px;
+}
+
+/*
+ * shadcn/ui semantic colours (components.json), mapped onto the GenTouch palette so components
+ * added with `npx shadcn add` match the existing screens. After adding one, check two things:
+ * `muted` is already our secondary text colour, so write `bg-ground` where shadcn writes
+ * `bg-muted`; and give bare `border` utilities a colour (`border-line`).
+ */
+@theme inline {
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-brand-deep);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--color-ground);
+  --color-secondary-foreground: var(--color-ink);
+  --color-accent: var(--color-brand-leaf-tint);
+  --color-accent-foreground: var(--color-ink);
+  --color-destructive: var(--color-error);
+  --color-muted-foreground: var(--color-muted);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line-strong);
+  --color-ring: var(--color-brand-deep);
+}
+
+/* Chart series colours (shadcn/ui chart with Recharts). */
+:root {
+  --chart-1: var(--color-brand-deep);
+  --chart-2: var(--color-brand-leaf);
+  --chart-3: var(--color-info);
+  --chart-4: var(--color-status-late);
+  --chart-5: var(--color-status-missed);
 }
 
 @layer base {

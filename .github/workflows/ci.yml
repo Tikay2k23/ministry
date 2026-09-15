@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Placeholder settings for type-checking, tests and the build. No real secrets.
+  APP_URL: http://localhost:3000
+  BETTER_AUTH_URL: http://localhost:3000
+  BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0000
+  DATABASE_URL: pglite://memory
+  EMAIL_PROVIDER: console
+  SCHEDULER_MODE: 'off'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  verify:
+    name: Type-check, lint, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  postgres:
+    name: Migrations on PostgreSQL 17 with Supabase roles
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gentouch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/gentouch
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: gentouch
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Recreate Supabase's Data API roles and their default grants
+        run: |
+          psql -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE anon NOLOGIN;
+          CREATE ROLE authenticated NOLOGIN;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated;
+          SQL
+      - name: Apply migrations twice (the second run must change nothing)
+        run: npm run db:migrate && npm run db:migrate
+      - name: Check row-level security and privileges
+        run: |
+          check() {
+            actual="$(psql -tAc "$2")"
+            if [ "$actual" != "$3" ]; then echo "✗ $1: expected $3, got $actual"; exit 1; fi
+            echo "✓ $1"
+          }
+          check "every table has row-level security" "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relrowsecurity" "0"
+          check "anon cannot read people" "SELECT has_table_privilege('anon', 'public.people', 'SELECT')" "f"
+          check "authenticated cannot read journal answers" "SELECT has_table_privilege('authenticated', 'public.form_answer_sets', 'SELECT')" "f"
+          check "the app role can read people" "SELECT has_table_privilege('gentouch_app', 'public.people', 'SELECT')" "t"
+          check "audit entries are insert-only for the app role" "SELECT has_table_privilege('gentouch_app', 'public.audit_logs', 'UPDATE') OR has_table_privilege('gentouch_app', 'public.audit_logs', 'DELETE')" "f"
+      - name: Seed reference data
+        run: npm run db:seed
+        env:
+          SEED_ADMIN_EMAIL: admin@example.org
+
+  e2e:
+    name: End-to-end tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

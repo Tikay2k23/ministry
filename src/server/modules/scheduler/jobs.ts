@@ -1,0 +1,27 @@
+import { ensureJournalLedger } from '../journal/ledger.service';
+import { deliverDueNotifications } from '../notifications/delivery.service';
+import { generateUpcomingSlots } from '../prayer/generation.service';
+import { cleanupExpiredRecords } from './cleanup.service';
+import type { JobDefinition } from './scheduler.service';
+
+/**
+ * The background jobs (docs/02 §7). Jobs run on intervals rather than at wall-clock times: each
+ * one is idempotent and works from the tick time, so running it more often than the daily time
+ * in the table is harmless and catches up after downtime. Within a tick they run in this order,
+ * so notifications queued by an earlier job are delivered in the same tick.
+ */
+export const JOBS: readonly JobDefinition[] = [
+  {
+    // journal.open_day + journal.resync_day + journal.close_day: days now close on time even
+    // when nobody opens the journal (the same function still runs on every journal request).
+    key: 'journal.ledger',
+    everyMinutes: 5,
+    run: async (db, now) => {
+      const result = await ensureJournalLedger(db, now);
+      return { opened: result.opened.length, resynced: result.resynced.length, closed: result.closed.length };
+    },
+  },
+  { key: 'prayer.generate_slots', everyMinutes: 60, run: generateUpcomingSlots },
+  { key: 'tokens.cleanup', everyMinutes: 24 * 60, run: cleanupExpiredRecords },
+  { key: 'notifications.deliver', everyMinutes: 1, run: deliverDueNotifications },
+];

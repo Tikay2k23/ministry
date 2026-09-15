@@ -1,3 +1,6 @@
+import { randomUUID } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { getEnv } from '../env';
 
 /**
@@ -20,6 +23,17 @@ class ConsoleEmailProvider implements EmailProvider {
   async send(message: EmailMessage): Promise<void> {
     const line = '─'.repeat(72);
     console.info(`\n${line}\n✉  To: ${message.to}\n   Subject: ${message.subject}\n${line}\n${message.text}\n${line}\n`);
+  }
+}
+
+/** End-to-end tests: writes each message as a JSON file into EMAIL_OUTBOX_DIR, where the test finds the link. */
+class FileEmailProvider implements EmailProvider {
+  constructor(private readonly directory: string) {}
+
+  async send(message: EmailMessage): Promise<void> {
+    await mkdir(this.directory, { recursive: true });
+    const file = path.join(this.directory, `${Date.now()}-${randomUUID()}.json`);
+    await writeFile(file, JSON.stringify({ ...message, sentAt: new Date().toISOString() }, null, 2));
   }
 }
 
@@ -47,7 +61,9 @@ export function getEmailProvider(): EmailProvider {
   provider =
     env.EMAIL_PROVIDER === 'resend'
       ? new ResendEmailProvider(env.EMAIL_API_KEY!, env.EMAIL_FROM)
-      : new ConsoleEmailProvider();
+      : env.EMAIL_PROVIDER === 'file'
+        ? new FileEmailProvider(env.EMAIL_OUTBOX_DIR)
+        : new ConsoleEmailProvider();
   return provider;
 }
 

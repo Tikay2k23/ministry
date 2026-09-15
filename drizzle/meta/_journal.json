@@ -50,6 +50,13 @@
       "when": 1789412602050,
       "tag": "0006_prayer_constraints",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789479711690,
+      "tag": "0007_row_level_security",
+      "breakpoints": true
     }
   ]
 }

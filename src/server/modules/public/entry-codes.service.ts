@@ -1,9 +1,10 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import { normalizeCode, randomCode } from '@/lib/ids';
 import { actorUserId, type RequestContext } from '../../context/request-context';
 import type { Database, Executor } from '../../db/client';
+import type { ENTRY_CODE_KINDS } from '../../db/enums';
 import { entryCodes, hierarchyNodes, people } from '../../db/schema';
 import { getEnv } from '../../env';
 import { forbidden, notFound } from '../../errors';
@@ -12,24 +13,37 @@ import { parseInput } from '../../validation';
 import { recordAudit } from '../audit/audit.service';
 
 /**
- * Entry codes behind printed QR codes (docs/02 §5). A code only tells the journal page which
- * leader to preselect — it grants no access to any data — and can be rotated if it leaks.
+ * Entry codes behind printed QR codes (docs/02 §5). A code only gives a page its context — the
+ * leader to preselect on the journal page, or the prayer chain to show — and grants no access to
+ * any data. Codes can be rotated if they leak.
  */
 
 const CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{8}$/;
 
+type EntryCodeKind = (typeof ENTRY_CODE_KINDS)[number];
+
+/** The kinds the journal pages accept: a prayer chain code never opens the journal. */
+const JOURNAL_CODE_KINDS: readonly EntryCodeKind[] = ['journal_general', 'journal_leader'];
+
 export const journalUrlForCode = (code: string) => `${getEnv().APP_URL}/j/${code}`;
+export const prayerUrlForCode = (code: string) => `${getEnv().APP_URL}/pray/${code}`;
 
 export interface ResolvedEntryCode {
   id: string;
   code: string;
-  kind: 'journal_general' | 'journal_leader';
+  kind: EntryCodeKind;
   status: 'active' | 'retired';
   replacementCode: string | null;
   leader: { personId: string; firstName: string; lastName: string; acceptsMembers: boolean; placed: boolean } | null;
+  prayerChainId: string | null;
 }
 
-export async function resolveEntryCode(executor: Executor, raw: string): Promise<ResolvedEntryCode | null> {
+/** Looks up a code of one of `kinds` (journal codes by default); a code of any other kind reads as not found. */
+export async function resolveEntryCode(
+  executor: Executor,
+  raw: string,
+  kinds: readonly EntryCodeKind[] = JOURNAL_CODE_KINDS,
+): Promise<ResolvedEntryCode | null> {
   const code = normalizeCode(raw);
   if (!CODE_PATTERN.test(code)) return null;
   const replacement = alias(entryCodes, 'replacement');
@@ -40,6 +54,7 @@ export async function resolveEntryCode(executor: Executor, raw: string): Promise
       kind: entryCodes.kind,
       status: entryCodes.status,
       replacementCode: replacement.code,
+      prayerChainId: entryCodes.prayerChainId,
       leaderId: people.id,
       firstName: people.firstName,
       lastName: people.lastName,
@@ -51,7 +66,7 @@ export async function resolveEntryCode(executor: Executor, raw: string): Promise
     .leftJoin(replacement, eq(replacement.id, entryCodes.replacedById))
     .leftJoin(people, eq(people.id, entryCodes.leaderPersonId))
     .leftJoin(hierarchyNodes, eq(hierarchyNodes.personId, entryCodes.leaderPersonId))
-    .where(eq(entryCodes.code, code));
+    .where(and(eq(entryCodes.code, code), inArray(entryCodes.kind, [...kinds])));
   if (!row) return null;
   return {
     id: row.id,
@@ -68,6 +83,7 @@ export async function resolveEntryCode(executor: Executor, raw: string): Promise
           placed: Boolean(row.nodeId),
         }
       : null,
+    prayerChainId: row.prayerChainId,
   };
 }
 
@@ -113,6 +129,26 @@ export async function ensureLeaderEntryCode(executor: Executor, leaderPersonId: 
     .select({ id: entryCodes.id, code: entryCodes.code })
     .from(entryCodes)
     .where(and(eq(entryCodes.leaderPersonId, leaderPersonId), eq(entryCodes.kind, 'journal_leader'), eq(entryCodes.status, 'active')));
+  return winner!;
+}
+
+/** Returns the prayer chain's active public code (`/pray/{code}`), creating one on first use. */
+export async function ensureChainEntryCode(executor: Executor, prayerChainId: string, label: string | null, createdBy: string | null = null) {
+  const active = () =>
+    executor
+      .select({ id: entryCodes.id, code: entryCodes.code })
+      .from(entryCodes)
+      .where(and(eq(entryCodes.prayerChainId, prayerChainId), eq(entryCodes.kind, 'prayer_chain'), eq(entryCodes.status, 'active')));
+  const [existing] = await active();
+  if (existing) return existing;
+  const [created] = await executor
+    .insert(entryCodes)
+    .values({ code: await uniqueCode(executor), kind: 'prayer_chain', prayerChainId, label, createdBy })
+    .onConflictDoNothing()
+    .returning({ id: entryCodes.id, code: entryCodes.code });
+  if (created) return created;
+  // Lost a race with a concurrent request: read the winner.
+  const [winner] = await active();
   return winner!;
 }
 

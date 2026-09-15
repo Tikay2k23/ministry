@@ -2,6 +2,7 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { getEnv } from '../env';
 import { HTTP_STATUS, isAppError } from '../errors';
+import { logger } from '../logger';
 import { getPortalContext, type PortalContext } from './context';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -26,7 +27,7 @@ export function portalJsonRoute<T>(handler: (portal: PortalContext, request: Req
           { status: HTTP_STATUS[error.code], headers: NO_STORE },
         );
       }
-      console.error('[route] unexpected error', error);
+      logger.error('Unexpected error in a portal route', error, { path: new URL(request.url).pathname });
       return NextResponse.json({ error: { code: 'INTERNAL', message: 'Something went wrong.' } }, { status: 500, headers: NO_STORE });
     }
   };

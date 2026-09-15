@@ -4,6 +4,7 @@ import { notificationDeliveries, notifications, people, users } from '../../db/s
 import { getEmailProvider } from '../../email/email';
 import { notificationEmail } from '../../email/templates';
 import { getEnv } from '../../env';
+import { errorSummary, logger } from '../../logger';
 import { issuePrayerActionLink } from '../prayer/action-links.service';
 import { templateFor } from './templates';
 
@@ -104,7 +105,7 @@ async function deliverOne(db: Database, row: ClaimedRow, now: Date): Promise<Out
     await finish({ status: 'sent', sentAt: now, attempts, lastError: null });
     return 'sent';
   } catch (error) {
-    const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    const message = errorSummary(error);
     await db
       .update(notificationDeliveries)
       .set({ status: 'failed', attempts, lastError: message })
@@ -136,7 +137,7 @@ export async function deliverDueNotifications(db: Database, now: Date) {
       summary[await deliverOne(db, row, now)] += 1;
     } catch (error) {
       // Never leave a notification stuck in "processing".
-      console.error('[notifications] delivery crashed', error);
+      logger.error('Notification delivery crashed', error, { notificationId: row.id });
       await db
         .update(notifications)
         .set({ status: 'pending', attempts: row.attempts + 1, scheduledFor: new Date(now.getTime() + 5 * 60_000) })

@@ -3,13 +3,17 @@ import { getEnv } from './env';
 
 /**
  * Small, explicit crypto helpers.
- * Keys are derived per purpose from BETTER_AUTH_SECRET with HKDF. Rotating that secret
- * invalidates encrypted values (e.g. TOTP secrets → users re-enrol). Dedicated, versioned
- * field-encryption keys arrive with V1 (FIELD_ENCRYPTION_KEYS, docs/02 §8.3).
+ * Keys are derived per purpose with HKDF from APP_ENCRYPTION_KEY. It falls back to
+ * BETTER_AUTH_SECRET, which was the root key before the two were separated, so existing encrypted
+ * and signed values stay valid: set APP_ENCRYPTION_KEY to that same value before authentication
+ * moves off Better Auth. Changing the root key invalidates encrypted values (e.g. TOTP secrets →
+ * users re-enrol). Dedicated, versioned field-encryption keys arrive with V1
+ * (FIELD_ENCRYPTION_KEYS, docs/02 §8.3).
  */
 
 function deriveKey(purpose: string): Buffer {
-  return Buffer.from(hkdfSync('sha256', getEnv().BETTER_AUTH_SECRET, 'gentouch-v1', purpose, 32));
+  const env = getEnv();
+  return Buffer.from(hkdfSync('sha256', env.APP_ENCRYPTION_KEY ?? env.BETTER_AUTH_SECRET, 'gentouch-v1', purpose, 32));
 }
 
 /** AES-256-GCM. Output: `v1.<iv>.<tag>.<ciphertext>` (base64url). */

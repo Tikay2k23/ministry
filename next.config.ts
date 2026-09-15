@@ -1,3 +1,4 @@
+import { withSentryConfig } from '@sentry/nextjs/config';
 import type { NextConfig } from 'next';
 
 /**
@@ -18,6 +19,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // End-to-end tests run their own server beside `npm run dev`, with separate build output (playwright.config.ts).
+  distDir: process.env.NEXT_DIST_DIR || '.next',
   // Database drivers load native/WASM assets at runtime and must not be bundled.
   serverExternalPackages: ['@electric-sql/pglite', 'pg'],
   async headers() {
@@ -25,4 +28,17 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Sentry (src/instrumentation.ts, src/instrumentation-client.ts). Error tracking is switched on by
+ * SENTRY_DSN and NEXT_PUBLIC_SENTRY_DSN. Source maps are uploaded only when the build has
+ * SENTRY_AUTH_TOKEN, SENTRY_ORG and SENTRY_PROJECT (CI and Vercel).
+ */
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  telemetry: false,
+  widenClientFileUpload: true,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+});

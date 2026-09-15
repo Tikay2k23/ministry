@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client';
 import { scheduledJobs } from '../../db/schema';
+import { errorSummary, logger } from '../../logger';
 
 /**
  * In-app scheduler (docs/02 §7, M3 note). Replaces the planned Graphile Worker, which needs a
@@ -70,15 +71,15 @@ export async function runDueJobs(db: Database, jobs: readonly JobDefinition[], n
         .where(eq(scheduledJobs.jobKey, job.key));
       results.push({ key: job.key, status: 'ok', summary });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[scheduler] job ${job.key} failed`, error);
+      const message = errorSummary(error);
+      logger.error('Background job failed', error, { job: job.key });
       await db
         .update(scheduledJobs)
         .set({
           lockedUntil: null,
           lastFinishedAt: new Date(),
           lastStatus: 'error',
-          lastError: message.slice(0, 2000),
+          lastError: message,
           runCount: sql`${scheduledJobs.runCount} + 1`,
           failureCount: sql`${scheduledJobs.failureCount} + 1`,
           nextRunAt: new Date(now.getTime() + Math.min(job.everyMinutes, RETRY_AFTER_ERROR_MINUTES) * 60_000),

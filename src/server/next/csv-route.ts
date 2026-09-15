@@ -1,6 +1,7 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
 import { HTTP_STATUS, isAppError } from '../errors';
+import { logger } from '../logger';
 import { getPortalContext, type PortalContext } from './context';
 
 /**
@@ -25,7 +26,7 @@ export function portalCsvRoute(handler: (portal: PortalContext, request: NextReq
       });
     } catch (error) {
       if (isAppError(error)) return text(error.message, HTTP_STATUS[error.code]);
-      console.error('[csv-route] unexpected error', error);
+      logger.error('Unexpected error in a CSV export', error, { path: request.nextUrl.pathname });
       return text('Something went wrong. Please try again.', 500);
     }
   };

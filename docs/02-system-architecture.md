@@ -27,6 +27,16 @@ Your preferred direction (Next.js + TypeScript + PostgreSQL) is **correct for th
 | Testing | **Vitest**, **Testcontainers** (real Postgres in integration tests), **Playwright** (mobile emulation, slow network), **axe-core**, **k6** (load), **OWASP ZAP** baseline | — | — |
 | Packaging | **Docker** image with two entrypoints: `web` and `worker`; **pnpm** | Portable across hosts; no vendor lock-in | — |
 
+> **Stack alignment (2026-09-15).** The ministry approved a stack for building and deploying the system. The code follows it now, without rewriting M1–M2. Where it differs from the table above:
+> - **Hosting:** Vercel, with PostgreSQL on **Supabase (Singapore)**, Cloudflare DNS, and GitHub with GitHub Actions. There is no separate worker process: background jobs run inside the app, and **Supabase Cron** triggers them every minute (§7 note). The "not Vercel-only" advice below therefore no longer applies.
+> - **Background jobs:** an in-app scheduler with leases replaces Graphile Worker, which needs a network PostgreSQL connection and so can't use the embedded development database. Supabase Queues can take over notification delivery if volume ever needs it.
+> - **Auth:** Better Auth stays for now. **Supabase Auth** is the approved target; the move needs a Supabase project. The encryption root key is already separate from the auth secret (`APP_ENCRYPTION_KEY`).
+> - **UI:** **shadcn/ui** components copied into `src/components/ui` and mapped onto the brand tokens. **React Hook Form** with Zod for multi-field forms (`src/components/forms/use-action-form.ts`). **TanStack Table** v9 for tables sorted in the browser. **Recharts** through the shadcn chart, instead of visx. M1–M2 screens keep their current pattern until a planned conversion pass.
+> - **Rate limiting:** **Upstash Redis** in production (`RATE_LIMIT_STORE=upstash`); the PostgreSQL table in development and tests. Turnstile only when needed.
+> - **Observability:** **Sentry** (errors only, personal data scrubbed) and structured JSON logs from `src/server/logger.ts`, instead of pino.
+> - **Testing:** Vitest on PGlite; a CI job that applies every migration to real PostgreSQL 17 with Supabase's roles; **Playwright** end-to-end tests.
+> - **Runtime and tooling:** Node.js 24 LTS; npm rather than pnpm.
+
 **A note on Laravel/Django.** Both are also excellent for admin-heavy CRUD systems (Django Admin in particular). If your developers are PHP or Python people, either would be a valid choice. I recommend the TypeScript stack because one language covers public forms, portal, worker and a future React Native app, and because you asked for it.
 
 ### Hosting recommendation
@@ -324,6 +334,20 @@ Provider webhooks → /api/webhooks/{provider} (signature-verified) → delivery
 
 It is idempotent and cheap when there is nothing to do, and the M3 worker will call the same functions on the schedule above. Two limits apply until then: a day nobody opens is closed on the next visit, and reminders and leader digests are not sent.
 
+**Implementation note (M3 and stack alignment, 2026-09-15): an in-app scheduler instead of Graphile Worker.**
+- **Why:** Graphile Worker needs a network PostgreSQL connection, so it can't run against the embedded development database, and Vercel has no long-running worker process.
+- **How jobs run:** `runDueJobs` (`src/server/modules/scheduler/scheduler.service.ts`) claims each due job with a lease in `scheduled_jobs`, in a single `UPDATE`. Overlapping ticks from several server instances therefore never run the same job twice. Jobs are idempotent and work from the tick time, so a repeated or missed tick is harmless.
+- **What triggers them:**
+  - `SCHEDULER_MODE=in_process`: a one-minute timer inside the server (development, or one long-running server).
+  - `SCHEDULER_MODE=external` (Vercel): **Supabase Cron** calls `POST /api/cron/tick` every minute with `Authorization: Bearer <CRON_SECRET>`. Set it up with `deploy/supabase-cron.sql`.
+- **Jobs so far** (`src/server/modules/scheduler/jobs.ts`) run on intervals rather than at wall-clock times:
+  - `journal.ledger` every 5 minutes: the open, resync and close steps above. Days now close on time even when nobody visits; the calls on each journal request remain.
+  - `prayer.generate_slots` hourly.
+  - `tokens.cleanup` daily.
+  - `notifications.deliver` every minute.
+  - `prayer.slot_reminders` and `prayer.check_overdue` come with the rest of M3; journal reminders and leader digests later.
+- **Failures:** a failed job is retried after 5 minutes. Its last error is stored without personal data (`errorSummary` in `src/server/logger.ts`) for Settings → System health.
+
 ---
 
 ## 8. Security architecture
@@ -354,6 +378,11 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
 - **Field-level encryption (V1)** for pastoral notes and confidential answers: AES-256-GCM, keys from the platform secret store with a key version per ciphertext (rotation-ready).
 - **Row-Level Security (V1, defence-in-depth)** on content tables (`form_answer_sets`, `person_notes`, `journal_reviews`), with the actor's scope set per transaction via `SET LOCAL`. Answers are stored one row **per sensitivity tier**, so RLS can gate *confidential* rows independently. In the MVP, the policy layer plus the test matrix are the primary control.
 - DB roles: `app_rw` (no DDL, **INSERT-only on `audit_logs`**), `migrator` (DDL), `reporting_ro` (read replica later).
+- **Implementation note (row-level security baseline, migration 0007, 2026-09-15).** Every table has row-level security enabled now, ahead of the scoped V1 policies:
+  - The group role `gentouch_app` holds the table privileges and one permissive policy per table. The application's login role joins it (`GRANT gentouch_app TO app_rw`). `UPDATE` and `DELETE` on `audit_logs` are revoked from it, so audit entries are insert-only.
+  - Any other role sees no rows, including Supabase's Data API roles `anon` and `authenticated`. On Supabase those two roles also lose every table and sequence privilege in `public`.
+  - Table owners (migrations, local development and tests) bypass row-level security, so nothing changes there.
+  - A new table needs `ENABLE ROW LEVEL SECURITY` and the `gentouch_app_full_access` policy in its migration. `tests/integration/schema.test.ts` and the CI PostgreSQL job fail until it has both.
 - Secrets only in environment variables or the platform secret store; `.env.example` is documented; no secrets in the repo; CI secret scanning.
 
 ### 8.4 Privacy by design

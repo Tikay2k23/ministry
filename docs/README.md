@@ -64,15 +64,15 @@ Where I **did generalise now**, because retrofitting later is expensive: a versi
 
 | ADR | Decision | Main alternative | Why |
 |---|---|---|---|
-| 01 | Next.js modular monolith + separate worker process, same codebase | Separate API service | One language/codebase; framework-free domain modules allow later extraction |
+| 01 | Next.js modular monolith, one codebase. *Changed 2026-09-15: no separate worker process (see 09)* | Separate API service | One language/codebase; framework-free domain modules allow later extraction |
 | 02 | PostgreSQL + **Drizzle** | Prisma | SQL-heavy integrity features stay typed |
-| 03 | **Better Auth**, invitation-only, magic link + TOTP (passkeys V1) | Clerk / Auth.js | Sessions and identities stay in our database; strong 2FA |
+| 03 | **Better Auth**, invitation-only, magic link + TOTP (passkeys V1). *2026-09-15: Supabase Auth is the approved target; the move needs a Supabase project* | Clerk / Auth.js | Sessions and identities stay in our database; strong 2FA |
 | 04 | Participants have **no accounts**: device keys, personal links, action tokens | Accounts for everyone | Your #1 UX rule, with safe identity |
 | 05 | Adjacency list + **closure table** + ledger path snapshot | ltree / recursive CTE only | Fast branch queries, simple moves, correct history |
 | 06 | **Journal ledger** (`journal_days`) separate from content | Compute "missing" on the fly | Correct history, fast dashboards, status/content permission split |
 | 07 | Versioned **forms engine**; answers stored **by sensitivity tier** | Hard-coded columns / per-answer rows | No-code question changes; RLS & encryption per tier |
 | 08 | **Scoped RBAC** (permission × scope) + sensitivity tiers | Flat roles | Same role, different data by place in the tree |
-| 09 | **Graphile Worker**; idempotent, date-parameterised jobs | Redis/BullMQ, platform cron | No extra infrastructure; transactional enqueue |
+| 09 | *Changed 2026-09-15:* **in-app scheduler with leases, triggered by Supabase Cron**; idempotent jobs (docs/02 §7 note) | Graphile Worker; Redis/BullMQ | Runs on Vercel and against the embedded development database; no extra infrastructure |
 | 10 | Provider-agnostic notifications; free channels first | Single SMS vendor | Cost control; swap providers freely |
 | 11 | UUIDv7 internal ids; separate public codes/tokens | Sequential ids | No enumeration; no ids in QR codes |
 | 12 | **Single-tenant (one deployment per ministry)** | Multi-tenant SaaS | Strongest isolation for pastoral data; revisit only if D3 changes |

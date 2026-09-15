@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '../db/client';
 import { getEnv } from '../env';
 import { AppError, HTTP_STATUS, isAppError } from '../errors';
+import { logger } from '../logger';
 import { resolveParticipantKey, type IssuedKey } from '../modules/public/participants.service';
 import type { ParticipantIdentity, PublicRequest } from '../modules/public/public-request';
 import { clientIp } from './context';
@@ -118,7 +119,7 @@ export function publicJsonRoute<T>(handler: (route: PublicRoute) => Promise<T>, 
       if (isAppError(error)) {
         return respond({ error: { code: error.code, message: error.message, ...error.details } }, HTTP_STATUS[error.code]);
       }
-      console.error('[public-route] unexpected error', error);
+      logger.error('Unexpected error in a public route', error, { requestId: req.requestId, path: request.nextUrl.pathname });
       return respond({ error: { code: 'INTERNAL', message: 'Something went wrong. Please try again.' } }, 500);
     }
   };

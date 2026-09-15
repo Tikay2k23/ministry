@@ -21,7 +21,8 @@
 | M0 · Foundation | ✅ Done 2026-09-14 | 35 integration tests, production build, 14-check HTTP smoke test |
 | M1 · People & Hierarchy | ✅ Done 2026-09-14 | 64 integration tests (incl. hierarchy property tests, scope/IDOR cases, import), production build, 20-check HTTP smoke test on a 1,885-person demo ministry |
 | M2 · Daily Journal | ✅ Done 2026-09-15 | 121 tests in 18 files, covering ledger time-travel, idempotent and concurrent submissions, identification, content visibility by sensitivity tier, review, pauses and rest days, proxy journals, registrations, reports and CSV. Also a production build (49 routes), a 35-check public-journal HTTP smoke test and an 8-check reports smoke test on the demo ministry |
-| M3 · Prayer Chain | Next (brings the background worker) | — |
+| Stack alignment | ✅ Done 2026-09-15 | The approved stack adopted without rewriting M1–M2 (docs/02 §1 note): row-level security baseline (migration 0007), in-app scheduler triggered by Supabase Cron, Upstash rate limiting, Sentry, structured logs, shadcn/ui, React Hook Form, TanStack Table, Recharts, Node 24 and GitHub Actions. Verified by type-check, lint, 152 tests in 24 files, a production build (51 routes) and 2 Playwright end-to-end tests (portal sign-in → people → leadership → journal on desktop; the public journal on a phone). Not yet exercised against real Supabase, Upstash, Sentry or GitHub, which need accounts |
+| M3 · Prayer Chain | In progress | Written so far: schema, migrations 0005–0006, the chain, schedule, commitment and slot-generation services, the scheduler and notification delivery. Next: public pages, portal screens, reminder and overdue jobs, integration tests |
 
 Implementation changes are recorded as notes in docs/02, 02a, 03 and 06.
 
@@ -33,9 +34,9 @@ Known M1 gaps, planned for later:
 - a visual walkthrough in a browser
 
 Known M2 gaps, planned for later:
-- **Needs a decision:** a Playwright mobile suite on throttled 3G, which needs a browser download the user must agree to
+- a Playwright suite on throttled 3G (Playwright itself is in place since 2026-09-15)
 - journal summaries by ministry or department
-- journal reminders and leader digests, which need the M3 worker
+- journal reminders and leader digests (the scheduler they need exists since 2026-09-15)
 - a Turnstile challenge
 - step-up re-authentication before exports
 - a PWA manifest
@@ -119,6 +120,13 @@ Native mobile app · Giving (separate compliance scope; use a dedicated payment/
 Typecheck → lint → unit → integration → permission suite → migrations apply cleanly to an empty DB and `drizzle-kit check` passes → build → E2E smoke (public journal + leader Today) → dependency audit.
 Coverage thresholds: **policy layer and hierarchy service 100% lines/branches**; domain services ≥ 85%.
 
+**Implementation note (2026-09-15).** `.github/workflows/ci.yml` runs three jobs on every push to `main` and every pull request:
+1. Type-check, lint, Vitest and the production build.
+2. Every migration applied twice to PostgreSQL 17 with Supabase's `anon` and `authenticated` roles, then row-level security and privilege checks and the reference-data seed.
+3. The Playwright end-to-end tests.
+
+Integration tests use PGlite rather than Testcontainers; job 2 covers the difference. Coverage thresholds, the generated permission suite, axe and ZAP are still to come.
+
 ### Definition of done (per feature)
 Acceptance criteria met · permission rows covered by tests · loading/empty/error states implemented · mobile checked at 360 px · accessible (axe clean) · audit events emitted · no PII in logs · docs/ADR updated if a concept changed · migration reviewed as SQL.
 
@@ -138,12 +146,17 @@ I'll tell you explicitly each time a **migration** must be run and each time a n
 | Variable | Purpose | Needed from |
 |---|---|---|
 | `APP_URL` | Public base URL (links, QR) | M0 |
-| `DATABASE_URL` | App role (`app_rw`), pooled | M0 |
+| `DATABASE_URL` | App login role (`app_rw`, a member of `gentouch_app`), pooled | M0 |
 | `DATABASE_URL_MIGRATOR` | Migration role, direct connection | M0 |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Auth signing / callback base | M0 |
 | `EMAIL_PROVIDER`, `EMAIL_API_KEY`, `EMAIL_FROM` | Magic links, digests (`console` provider in dev) | M0 |
-| `FORM_SESSION_SECRET` | Not needed. The form-session HMAC key is derived from `BETTER_AUTH_SECRET` (docs/02 §4, M2 note) | — |
-| `RATE_LIMIT_HMAC_SECRET` | Not needed. The rate-limit key is derived from `BETTER_AUTH_SECRET` | — |
+| `FORM_SESSION_SECRET` | Not needed. The form-session HMAC key is derived from `APP_ENCRYPTION_KEY`, which falls back to `BETTER_AUTH_SECRET` (docs/02 §4, M2 note) | — |
+| `RATE_LIMIT_HMAC_SECRET` | Not needed. The rate-limit key is derived the same way | — |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Conditional bot challenge. Deferred: not required for M2 | Later |
-| `SENTRY_DSN` | Error tracking (optional in dev) | M0 |
+| `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` | Error tracking on the server and in the browser (optional in dev) | M0; browser 2026-09 |
+| `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` | Source map upload in CI and Vercel builds | 2026-09 |
+| `APP_ENCRYPTION_KEY` | Root key for app encryption and signing; defaults to `BETTER_AUTH_SECRET` | 2026-09 |
+| `RATE_LIMIT_STORE`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Rate-limit counters in Upstash Redis (production) | 2026-09 |
+| `SCHEDULER_MODE`, `CRON_SECRET` | How background jobs run; the token Supabase Cron sends to `/api/cron/tick` | M3 |
+| `EMAIL_OUTBOX_DIR` | Where `EMAIL_PROVIDER=file` writes messages (end-to-end tests) | 2026-09 |
 | `SMS_PROVIDER`, `SMS_API_KEY` · `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` · `FIELD_ENCRYPTION_KEYS` · `OBJECT_STORAGE_*` | V1 features | V1 |

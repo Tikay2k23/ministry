@@ -1205,7 +1205,8 @@ CREATE TABLE audit_logs (                           -- append-only (app role: IN
 CREATE INDEX audit_by_entity ON audit_logs (entity_type, entity_id, occurred_at DESC);
 CREATE INDEX audit_by_actor  ON audit_logs (actor_user_id, occurred_at DESC);
 CREATE INDEX audit_by_time   ON audit_logs USING brin (occurred_at);
--- Enforcement: REVOKE UPDATE, DELETE ON audit_logs FROM app_rw; the retention job runs as a separate role.
+-- Enforcement (migration 0007): REVOKE UPDATE, DELETE ON audit_logs FROM gentouch_app, the group role of the
+-- app's login role (docs/02 §8.3 note); the retention job runs as a separate role.
 ```
 
 ### 4.15 Import & export
