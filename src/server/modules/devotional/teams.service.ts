@@ -6,7 +6,7 @@ import { TEAM_MEMBER_ROLES } from '../../db/enums';
 import { isUniqueViolation } from '../../db/errors';
 import { gatheringTypes, ministries, people, personUnavailability, servingRoles, teamMemberServingRoles, teamMemberships, teams } from '../../db/schema';
 import { conflict, forbidden, notFound, validationError } from '../../errors';
-import { grantsFor, hasPermission } from '../../policy/can';
+import { grantsFor, hasGlobal, hasPermission } from '../../policy/can';
 import { parseInput } from '../../validation';
 import { recordAudit } from '../audit/audit.service';
 import { localDate } from '../journal/journal-dates';
@@ -73,8 +73,17 @@ function awayLabel(startsAt: Date, endsAt: Date, timeZone: string) {
   return first === last ? label(startsAt) : `${label(startsAt)} – ${label(new Date(endsAt.getTime() - 1))}`;
 }
 
+/**
+ * The worship teams page (docs/06 row 30): people who manage teams, and holders of a global
+ * `devotional.view` (pastors, the office, viewers). Leaders and prayer coordinators see rosters,
+ * not every team's members and away dates.
+ */
+export function canViewWorshipTeams(ctx: RequestContext): boolean {
+  return hasPermission(ctx, 'devotional.teams.manage') || hasGlobal(ctx, 'devotional.view');
+}
+
 export async function listWorshipTeams(db: Database, ctx: RequestContext) {
-  if (!hasPermission(ctx, 'devotional.view') && !hasPermission(ctx, 'devotional.teams.manage')) throw notFound('teams');
+  if (!canViewWorshipTeams(ctx)) throw notFound('teams');
   const timeZone = await ministryTimeZone(db);
   const teamRows = await queryRows<{ id: string; name: string; ministry_id: string; ministry_name: string }>(
     db,
@@ -133,7 +142,8 @@ export async function listWorshipTeams(db: Database, ctx: RequestContext) {
           primaryRoleId: roles.find((r) => r.isPrimary)?.servingRoleId ?? null,
           away: away
             .filter((a) => a.personId === m.personId)
-            .map((a) => ({ id: a.id, label: awayLabel(a.startsAt, a.endsAt, timeZone), reason: a.reason })),
+            // Why someone is away is for the people who look after the team.
+            .map((a) => ({ id: a.id, label: awayLabel(a.startsAt, a.endsAt, timeZone), reason: manageable.has(team.id) ? a.reason : null })),
         };
       }),
   }));

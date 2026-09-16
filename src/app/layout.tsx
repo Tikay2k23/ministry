@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Nunito } from 'next/font/google';
+import { connection } from 'next/server';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
@@ -17,7 +18,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Every page is rendered per request, so its scripts get this request's CSP nonce (src/proxy.ts).
+  // A page prerendered at build time would carry no nonce, and the browser would block its scripts.
+  await connection();
   return (
     <html lang="en" className={`${inter.variable} ${nunito.variable}`}>
       <body>{children}</body>

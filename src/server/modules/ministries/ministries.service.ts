@@ -26,9 +26,16 @@ import { recordAudit } from '../audit/audit.service';
 
 const today = (ctx: RequestContext) => ctx.now.toISOString().slice(0, 10);
 
+/**
+ * Which ministries' structure the actor sees (docs/06 row 11, note l). The structure isn't
+ * sensitive: a grant scoped to people (a branch, a prayer chain, a gathering type) sees all of it,
+ * while a grant scoped to a ministry keeps a Ministry Head to their own. Member lists are
+ * narrowed separately, to the people the actor may see.
+ */
 function ministryIdsInScope(ctx: RequestContext): string[] | 'all' {
-  if (hasGlobal(ctx, 'ministries.view')) return 'all';
-  return grantsFor(ctx, 'ministries.view').flatMap((g) => (g.scope.type === 'ministry' ? [g.scope.ministryId] : []));
+  const grants = grantsFor(ctx, 'ministries.view');
+  if (hasGlobal(ctx, 'ministries.view') || grants.some((g) => g.scope.type !== 'ministry' && g.scope.type !== 'team')) return 'all';
+  return grants.flatMap((g) => (g.scope.type === 'ministry' ? [g.scope.ministryId] : []));
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -59,7 +66,8 @@ export async function listMinistries(db: Executor, ctx: RequestContext) {
 export async function getMinistry(db: Executor, ctx: RequestContext, ministryId: string) {
   assertPermission(ctx, 'ministries.view');
   if (!z.uuid().safeParse(ministryId).success) throw notFound('ministry');
-  assertStructureScope(ctx, 'ministries.view', { ministryId });
+  const scope = ministryIdsInScope(ctx);
+  if (scope !== 'all' && !scope.includes(ministryId)) throw notFound('ministry');
 
   const [ministry] = await db
     .select()

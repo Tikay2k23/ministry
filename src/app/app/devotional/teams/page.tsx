@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ministryTimeZone } from '@/server/modules/devotional/common';
 import { listGatheringTypes } from '@/server/modules/devotional/gathering-types.service';
 import { listServingRoles } from '@/server/modules/devotional/serving-roles.service';
-import { listWorshipTeams, worshipTeamOptions } from '@/server/modules/devotional/teams.service';
+import { canViewWorshipTeams, listWorshipTeams, worshipTeamOptions } from '@/server/modules/devotional/teams.service';
 import { localDate } from '@/server/modules/journal/journal-dates';
 import { hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
@@ -23,7 +23,7 @@ export const metadata: Metadata = { title: 'Worship teams' };
 /** Worship teams (docs/04 A21, docs/05 W8 step 2): members, the roles they usually play, and days they're away. */
 export default async function WorshipTeamsPage() {
   const { ctx } = await requirePortal();
-  if (!hasPermission(ctx, 'devotional.view')) notFound();
+  if (!canViewWorshipTeams(ctx)) notFound();
   const db = getDb();
   const [teams, roles, options, types, timeZone] = await Promise.all([
     listWorshipTeams(db, ctx),
@@ -44,7 +44,7 @@ export default async function WorshipTeamsPage() {
         description="Worship teams, the roles each member usually plays, and the days they’re away."
         actions={options.ministries.length > 0 && <CreateTeamForm ministries={options.ministries} />}
       />
-      <DevotionalTabs setup={canSetup} />
+      <DevotionalTabs teams setup={canSetup} />
 
       {teams.length === 0 ? (
         <EmptyState

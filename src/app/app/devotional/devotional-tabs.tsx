@@ -5,11 +5,11 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
 
 /** Switches between the devotional pages (docs/04 A19–A21). */
-export function DevotionalTabs({ setup }: { setup: boolean }) {
+export function DevotionalTabs({ teams, setup }: { teams: boolean; setup: boolean }) {
   const pathname = usePathname();
   const tabs = [
     { href: '/app/devotional', label: 'Calendar', active: pathname === '/app/devotional' },
-    { href: '/app/devotional/teams', label: 'Worship teams', active: pathname.startsWith('/app/devotional/teams') },
+    ...(teams ? [{ href: '/app/devotional/teams', label: 'Worship teams', active: pathname.startsWith('/app/devotional/teams') }] : []),
     ...(setup ? [{ href: '/app/devotional/setup', label: 'Setup', active: pathname.startsWith('/app/devotional/setup') }] : []),
   ];
   return (

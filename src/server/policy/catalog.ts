@@ -50,7 +50,8 @@ export const PERMISSIONS = {
   'hierarchy.requests.decide': { module: 'hierarchy', description: 'Approve or reject leader change requests', scopes: GB },
 
   // Ministries
-  'ministries.view': { module: 'ministries', description: 'View ministries, departments and teams', scopes: GMT },
+  // Any scope shows the structure; a ministry or team grant narrows it (docs/06 row 11, note l).
+  'ministries.view': { module: 'ministries', description: 'View ministries, departments and teams', scopes: GBMTCY },
   'ministries.manage': { module: 'ministries', description: 'Create and archive ministries', scopes: G },
   'ministry.structure.manage': { module: 'ministries', description: 'Manage departments and teams', scopes: GM },
   'ministry.members.manage': { module: 'ministries', description: 'Manage ministry and team members', scopes: GMT },
@@ -85,7 +86,8 @@ export const PERMISSIONS = {
   'prayer.requests.confidential.view': { module: 'prayer', description: 'Read confidential prayer requests', sensitive: true, pastoral: true, scopes: G },
 
   // Devotional (enforced from M4)
-  'devotional.view': { module: 'devotional', description: 'View devotional schedules and rosters', scopes: GMTY },
+  // Rosters are open to anyone holding this, in any scope (docs/06 row 29, note k).
+  'devotional.view': { module: 'devotional', description: 'View devotional schedules and rosters', scopes: GBMTCY },
   'devotional.manage': { module: 'devotional', description: 'Manage schedules and rosters', scopes: GMTY },
   'devotional.teams.manage': { module: 'devotional', description: 'Manage worship teams and serving roles', scopes: GMTY },
 
@@ -249,8 +251,8 @@ export const ROLES = {
     description: 'Runs their prayer chains: schedules, assignments and gentle follow-up.',
     defaultScopeType: 'prayer_chain',
     permissions: [
-      'people.view', 'people.contact.view', 'prayer.view', 'prayer.manage', 'prayer.assign', 'prayer.resolve',
-      'prayer.reports.view', 'care.view', 'care.manage', 'reports.view', 'reports.export',
+      'people.view', 'people.contact.view', 'ministries.view', 'prayer.view', 'prayer.manage', 'prayer.assign',
+      'prayer.resolve', 'prayer.reports.view', 'devotional.view', 'care.view', 'care.manage', 'reports.view', 'reports.export',
     ],
   },
   worship_coordinator: {

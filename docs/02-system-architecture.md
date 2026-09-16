@@ -380,6 +380,23 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
 ### 8.2 Security headers (all routes)
 `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` · `Content-Security-Policy` (nonce-based, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`) · `Referrer-Policy: strict-origin-when-cross-origin` (`no-referrer` on token routes) · `Permissions-Policy: camera=(), microphone=(), geolocation=()` · `X-Content-Type-Options: nosniff` · `Cross-Origin-Opener-Policy: same-origin`.
 
+**Implementation note (M5, 2026-09-17).**
+- **Where the policy is set:** `src/proxy.ts` builds the Content-Security-Policy for every request except API routes and build assets (`src/server/security/csp.ts`). The other headers are in `next.config.ts`.
+- **Scripts:** `script-src 'self' 'nonce-…' 'strict-dynamic'`. Next.js puts the nonce on its own scripts. Development adds `'unsafe-eval'` for React's error overlay.
+- **Every page is rendered per request:** the root layout awaits `connection()`. A page prerendered at build time would carry no nonce, and the browser would block its scripts.
+- **Styles:** `style-src 'self' 'unsafe-inline'`, not a nonce. Server-rendered `style` attributes (progress bars, chart colours) can't carry one, and adding a nonce would switch `'unsafe-inline'` off. Inline styles can't run code, so scripts stay strict.
+- **Other directives:**
+  - `connect-src` adds Sentry's ingest host only when `NEXT_PUBLIC_SENTRY_DSN` is set.
+  - `upgrade-insecure-requests` is added when `APP_URL` is https.
+  - `img-src` allows `data:` and `blob:`.
+- **Token routes:** `/a/…` and `/k/…` send `Referrer-Policy: no-referrer`. Being dynamic, they are sent with `no-store`.
+- **Indexing:** `/robots.txt` disallows every path.
+- **How it's checked:**
+  - `tests/unit/csp.test.ts` covers the policy builder.
+  - `tests/e2e/portal.security.spec.ts` checks the headers, that every script carries the response's nonce, the token pages, cross-site posts (refused with 403), markup in names (shown as text), HttpOnly SameSite session cookies, and pages with no policy violations. It runs in the E2E job, and against a production build in `.github/workflows/security.yml`.
+  - The same workflow runs an OWASP ZAP baseline scan. Only the rules marked FAIL in `.zap/rules.tsv` fail it.
+  - It also runs `npm audit` (high and critical fail) and gitleaks.
+
 ### 8.3 Data protection
 - TLS everywhere; managed encryption at rest; encrypted backups.
 - **Field-level encryption (V1)** for pastoral notes and confidential answers: AES-256-GCM, keys from the platform secret store with a key version per ciphertext (rotation-ready).

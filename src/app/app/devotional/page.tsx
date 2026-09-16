@@ -10,6 +10,7 @@ import { inputClassName } from '@/components/ui/field';
 import { PageHeader } from '@/components/ui/page-header';
 import { buildHref } from '@/components/ui/pagination';
 import { getDevotionalCalendar } from '@/server/modules/devotional/calendar.service';
+import { canViewWorshipTeams } from '@/server/modules/devotional/teams.service';
 import { hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
@@ -40,7 +41,7 @@ export default async function DevotionalCalendarPage({ searchParams }: { searchP
         description="Who serves when, and who has replied."
         actions={calendar.unpublishedIds.length > 0 && <PublishRostersButton gatheringIds={calendar.unpublishedIds} label="Publish this week" />}
       />
-      <DevotionalTabs setup={calendar.can.setup} />
+      <DevotionalTabs teams={canViewWorshipTeams(ctx)} setup={calendar.can.setup} />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <nav aria-label="Choose a week" className="flex flex-wrap items-center gap-2">

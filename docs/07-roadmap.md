@@ -25,6 +25,8 @@
 | M3 · Prayer Chain | ✅ Done 2026-09-16 | Built: chains, schedules, standing commitments, slot generation, assignments, substitutes and coordinator follow-up; the public chain page and personal links; the portal chain list, board and setup pages; slot reminders and the overdue check; the in-app inbox; the dashboard tile; the completion report with CSV. Verified by type-check, lint, 167 tests in 25 files (19 for the prayer chain and scheduler, covering time zones and midnight, grace and follow-up, scope, anonymity and reports), a production build (63 routes) and 3 Playwright end-to-end tests. The new test creates and starts a chain, assigns a member, shares their link, confirms on a phone and finds the slot on the chain page. The 7-day staging run is still to do (see the gaps below) |
 | M4 · Devotional / Worship | ✅ Done 2026-09-17 | Built: serving roles, gathering types with roster templates, worship teams (members, the roles they play, away dates), and schedules with team rotation (daily, weekly or monthly). Also generation with auto-fill, roster editing with warnings, publishing with personal links, accept or decline on a phone, substitute suggestions, cancelling, reminders, the devotional calendar and the dashboard card. Verified by type-check, lint, 186 tests in 27 files and a production build (70 routes). 19 of the tests are for the devotional module, covering both exit criteria: four weeks of rotation generated correctly, and manual edits surviving regeneration. There are 4 Playwright end-to-end tests. The new one builds a worship team, fills and publishes a roster, shares a member's link, accepts on a phone, and finds the reply on the roster and the dashboard. Every devotional page was also checked at phone width (375 px) |
 
+| M5 · Hardening & Pilot | 🟡 In progress | **5.1 Security & permissions ✅ (2026-09-17).** Built: a per-request nonce Content-Security-Policy, token-page headers, `robots.txt`, the permission suite (role bundles against the matrix, and generated scope checks), and targeted CSRF, XSS, SQL-injection and cookie tests. Also a Security workflow: `npm audit`, gitleaks, and an OWASP ZAP baseline on a production build. The suite found leaders' and coordinators' devotional and ministry views out of line with the matrix, fixed in docs/06 notes k and l. Still to come: 5.2 admin and operations screens, 5.3 accessibility, 5.4 pilot materials, 5.5 performance, 5.6 deployment and recovery |
+
 Implementation changes are recorded as notes in docs/02, 02a, 03 and 06.
 
 Known M1 gaps, planned for later:
@@ -146,6 +148,14 @@ Coverage thresholds: **policy layer and hierarchy service 100% lines/branches**;
 3. The Playwright end-to-end tests.
 
 Integration tests use PGlite rather than Testcontainers; job 2 covers the difference. Coverage thresholds, the generated permission suite, axe and ZAP are still to come.
+
+Since M5 (2026-09-17):
+- The permission suite runs with the other tests (`tests/integration/permission-matrix.test.ts`).
+- `.github/workflows/security.yml` runs on every push, every pull request and weekly:
+  - `npm audit`: high and critical advisories fail it.
+  - gitleaks.
+  - The security spec and an OWASP ZAP baseline against a production build on PostgreSQL 17.
+- Coverage thresholds and axe are still to come.
 
 ### Definition of done (per feature)
 Acceptance criteria met · permission rows covered by tests · loading/empty/error states implemented · mobile checked at 360 px · accessible (axe clean) · audit events emitted · no PII in logs · docs/ADR updated if a concept changed · migration reviewed as SQL.

@@ -164,6 +164,16 @@ describe('directory search and profiles', () => {
     expect(sneaky.total).toBe(0);
   });
 
+  it('treats SQL and LIKE wildcards in a search as plain text (docs/07 security tests)', async () => {
+    const everyone = (await searchPeople(db, admin, {})).total;
+    for (const q of ["' OR '1'='1", "'; DROP TABLE people; --", '%', '_', '\\', '%%%%']) {
+      expect((await searchPeople(db, admin, { q })).total, q).toBe(0);
+    }
+    // A name with a quote in the search still finds the person, and the table is untouched.
+    expect((await searchPeople(db, admin, { q: "Mark' --" })).items.some((p) => p.name.startsWith('Mark'))).toBe(true);
+    expect((await searchPeople(db, admin, {})).total).toBe(everyone);
+  });
+
   it('finds names without accents and phones only within contact scope', async () => {
     await add(admin, 'José', 'Peña', { leaderId: w.mark });
     const byName = await searchPeople(db, admin, { q: 'jose pena' });

@@ -2,9 +2,8 @@ import { withSentryConfig } from '@sentry/nextjs/config';
 import type { NextConfig } from 'next';
 
 /**
- * Baseline security headers for every route.
- * A nonce-based Content-Security-Policy is added in milestone M5 (hardening),
- * see docs/02-system-architecture.md §8.2.
+ * Security headers for every route (docs/02-system-architecture.md §8.2). The nonce-based
+ * Content-Security-Policy is set per request in src/proxy.ts.
  */
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -24,7 +23,13 @@ const nextConfig: NextConfig = {
   // Database drivers load native/WASM assets at runtime and must not be bundled.
   serverExternalPackages: ['@electric-sql/pglite', 'pg'],
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    // Personal links carry a secret token: never send it onward as a referrer (docs/02 §4).
+    const tokenPage = [{ key: 'Referrer-Policy', value: 'no-referrer' }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      { source: '/a/:token*', headers: tokenPage },
+      { source: '/k/:token*', headers: tokenPage },
+    ];
   },
 };
 

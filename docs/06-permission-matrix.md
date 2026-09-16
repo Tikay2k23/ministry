@@ -99,6 +99,8 @@ Scope: **G** global · **B** own branch (self + downline) · **D** own direct gr
   - **Ministry Heads** now hold `devotional.teams.manage` (row 30). `devotional.manage` stays "when granted" for them (note f).
   - **Appointing:** Worship Coordinators are appointed on the gathering's setup page by someone with global `iam.users.manage`.
   - **Adding people** to rosters and teams searches confirmed people by name and person code only, as in note j.
+  - **Worship teams page (row 30, since M5):** open to holders of `devotional.teams.manage` and of a global `devotional.view`. Leaders and Prayer Chain Coordinators see rosters but not the teams list. Pastoral Care, being global, can open it too, although row 30 says "—". Why someone is away is shown only to people who look after that team.
+- **l** — *Ministry structure (implemented in M5).* Structure isn't sensitive, so any `ministries.view` grant scoped to people shows every ministry, department and team (row 11 "V"). That covers a branch, a prayer chain or a gathering type. A grant scoped to a ministry keeps a Ministry Head to their own. Member lists are always narrowed to the people the viewer may see (`people.view`). The Prayer Chain Coordinator bundle gained `ministries.view` and `devotional.view` to match rows 11 and 29.
 
 ### Participant (no login) capabilities
 | Capability | Allowed |
@@ -197,3 +199,25 @@ The suite builds a fixture ministry (2 Primary Leaders × 3 Leaders × 4 members
 | T16 | Action token for assignment 1 used to respond to assignment 2 | `NOT_FOUND` |
 | T17 | Revoked role assignment, session still open | Next request denied (grants loaded per request, never cached across requests) |
 | T18 | Sensitive permission without 2FA-verified session | Denied with a 2FA prompt |
+
+**Implementation note (M5, 2026-09-17): the permission suite.** `tests/integration/permission-matrix.test.ts` has two parts:
+- **Role bundles against the matrix:** every permission fits its role's scope type (the check found `ministries.view` and `devotional.view` in branch-scoped bundles, fixed in note l). It also checks the sensitive (⚠) and pastoral (✝) markers of §4, who may read each tier of content, and that the Viewer is read-only.
+- **Generated scope checks:** every permission of the Leader, Primary Leader and Pastor bundles is evaluated against all seven people of the fixture ministry, one person at a time and as a list query, with depth caps applied. That's over 500 cells, compared with the tree rather than with the implementation.
+
+Where each scenario above is tested:
+
+| # | Test |
+|---|---|
+| T1, T2 | `journal-portal.test.ts`: another leader's member's entry is `NOT_FOUND` (pages call the same service) |
+| T3 | `people.test.ts` (search) and the generated list queries |
+| T4, T5, T13 | `journal-content-access.test.ts`: status only above the direct leader, widening by setting, and reading after a move |
+| T6 | `journal-portal.test.ts`: confidential answers for pastors only, with an access-log entry |
+| T7, T9 | The bundle checks: no content permission for Super Admin or the office. Break-glass access isn't built yet |
+| T8 | `people-export.test.ts` |
+| T10, T11 | `hierarchy.test.ts` |
+| T12 | `iam.test.ts` |
+| T14 | `prayer.test.ts` and `devotional.test.ts` |
+| T15 | By design: public routes take identity only from the device key and never accept a person id |
+| T16 | By design: a token carries its own assignment. `prayer.test.ts` refuses another person's assignment id |
+| T17 | `permission-matrix.test.ts`: a revoked role gives no grants on the next request |
+| T18 | `iam.test.ts` and `permission-matrix.test.ts` |

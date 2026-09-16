@@ -8,6 +8,7 @@ import { formatClockTime } from '@/lib/time-range';
 import { formatMinutes, SERVING_CATEGORY_LABELS } from '@/server/modules/devotional/devotional.schemas';
 import { gatheringTypeCreationOptions, listGatheringTypes } from '@/server/modules/devotional/gathering-types.service';
 import { listServingRoles } from '@/server/modules/devotional/serving-roles.service';
+import { canViewWorshipTeams } from '@/server/modules/devotional/teams.service';
 import { hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
@@ -28,7 +29,7 @@ export default async function DevotionalSetupPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Devotional" description="Kinds of gatherings, with their schedules and roster templates, and the roles people serve in." />
-      <DevotionalTabs setup />
+      <DevotionalTabs teams={canViewWorshipTeams(ctx)} setup />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard

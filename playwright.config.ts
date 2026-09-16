@@ -27,7 +27,8 @@ export default defineConfig({
   webServer: {
     command: 'node --import tsx tests/e2e/server.ts',
     url: `${E2E_BASE_URL}/sign-in`,
-    reuseExistingServer: !process.env.CI,
+    // In CI a fresh server is required, except where the job starts one itself (the security scan).
+    reuseExistingServer: !process.env.CI || process.env.E2E_REUSE_SERVER === '1',
     timeout: 300_000,
     stdout: 'pipe',
   },
