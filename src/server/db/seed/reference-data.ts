@@ -14,6 +14,7 @@ import {
   roles,
   systemSettings,
 } from '../schema';
+import { ensurePrayerReportForm } from '../../modules/prayer/report-form';
 import { SETTINGS } from '../../modules/settings/definitions';
 import { bundleEntryDepthCap, bundleEntryKey, PERMISSIONS, ROLES } from '../../policy/catalog';
 
@@ -88,6 +89,7 @@ export async function seedReferenceData(db: Database): Promise<void> {
     }
 
     await ensureDefaultJournalForm(tx);
+    await ensurePrayerReportForm(tx);
     await ensureGeneralEntryCode(tx);
 
     await tx

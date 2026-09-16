@@ -1,7 +1,7 @@
 import { ClipboardList, Download } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { DayDots, formatDayLabel } from '@/components/journal/journal-status';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -12,9 +12,10 @@ import { buildHref } from '@/components/ui/pagination';
 import { cn } from '@/lib/cn';
 import { isAppError } from '@/server/errors';
 import { getJournalGroupsReport, getJournalPeopleReport } from '@/server/modules/reports/journal-reports.service';
-import { hasPermission } from '@/server/policy/can';
+import { hasChainScope, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
+import { ReportModules } from './report-modules';
 
 export const metadata: Metadata = { title: 'Reports' };
 
@@ -45,7 +46,13 @@ function Tab({ href, active, children }: { href: string; active: boolean; childr
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const { ctx } = await requirePortal();
-  if (!hasPermission(ctx, 'reports.view') || !hasPermission(ctx, 'journal.status.view')) notFound();
+  if (!hasPermission(ctx, 'reports.view')) notFound();
+  const prayerReports = hasChainScope(ctx, 'prayer.view');
+  if (!hasPermission(ctx, 'journal.status.view')) {
+    // Prayer chain coordinators have reports but no journal access.
+    if (prayerReports) redirect('/app/reports/prayer');
+    notFound();
+  }
   const db = getDb();
   const sp = await searchParams;
   const tab = first(sp.tab) === 'groups' ? 'groups' : 'people';
@@ -89,6 +96,8 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
           ) : undefined
         }
       />
+
+      <ReportModules active="journal" journal prayer={prayerReports} />
 
       <nav aria-label="Report" className="flex flex-wrap gap-2">
         <Tab href={buildHref('/app/reports', { ...period, view: input.view })} active={tab === 'people'}>

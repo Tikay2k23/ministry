@@ -2,58 +2,23 @@ import { and, asc, count, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { formatClockTime } from '@/lib/time-range';
 import { actorUserId, type RequestContext } from '../../context/request-context';
-import { queryRows, type Database } from '../../db/client';
-import { PRAYER_CHAIN_STATUSES, PRAYER_CHAIN_TYPES, type PrayerChainStatus } from '../../db/enums';
-import { forms, ministries, people, prayerChainSchedules, prayerChains, prayerCommitments, prayerSlots } from '../../db/schema';
+import { queryRows, type Database, type Executor } from '../../db/client';
+import { PRAYER_CHAIN_STATUSES, type PrayerChainStatus } from '../../db/enums';
+import { ministries, people, prayerChainSchedules, prayerChains, prayerCommitments, prayerSlots } from '../../db/schema';
 import { forbidden, invalidState, validationError } from '../../errors';
 import { chainScopeFilter, canAccessChain, grantsFor, hasGlobal } from '../../policy/can';
 import { parseInput } from '../../validation';
 import { changedFields, recordAudit } from '../audit/audit.service';
 import { displayName } from '../people/people.queries';
 import { ensureChainEntryCode, prayerUrlForCode } from '../public/entry-codes.service';
-import {
-  actorFromContext,
-  chainForActor,
-  chainToday,
-  optionalText,
-  PRAYER_REPORT_FORM_KEY,
-  type ChainRow,
-} from './common';
+import { actorFromContext, chainForActor, chainToday, type ChainRow } from './common';
 import { listChainCoordinators } from './coordinators.service';
 import { cancelUpcomingSlots, generateChainSlots } from './generation.service';
-import { describeRecurrence, parseRecurrence } from './recurrence';
-import { checkScheduleValues, describeSchedule, scheduleShape } from './schedules.service';
-import { isValidTimeZone } from './slot-times';
+import { CreateChainInput, describeSchedule, UpdateChainInput } from './prayer.schemas';
+import { describeRecurrence, formatRecurrence, parseRecurrence } from './recurrence';
+import { ensurePrayerReportForm } from './report-form';
 
 /** Prayer chains (docs/05 W10, docs/04 A16). */
-
-const chainShape = {
-  name: z.string().trim().min(1, 'Name the prayer chain').max(120),
-  description: optionalText(1000),
-  chainType: z.enum(PRAYER_CHAIN_TYPES),
-  timezone: z.string().trim().refine(isValidTimeZone, 'Choose a valid time zone'),
-  ministryId: z.preprocess((v) => (v === '' ? null : v), z.uuid().nullish()),
-  startsOn: z.iso.date(),
-  endsOn: z.preprocess((v) => (v === '' ? null : v), z.iso.date().nullish()),
-  graceMinutes: z.coerce.number().int().min(0).max(240).default(15),
-  checkinOpensMinutes: z.coerce.number().int().min(0).max(120).default(15),
-  requireCheckin: z.boolean().default(false),
-  showNamesPublicly: z.boolean().default(false),
-  collectReports: z.boolean().default(true),
-};
-
-type ChainValues = { startsOn: string; endsOn?: string | null };
-const checkChainDates = (value: ChainValues, ctx: { addIssue: (issue: { code: 'custom'; path: string[]; message: string }) => void }) => {
-  if (value.endsOn && value.endsOn < value.startsOn) {
-    ctx.addIssue({ code: 'custom', path: ['endsOn'], message: 'The end date must be on or after the start date.' });
-  }
-};
-
-export const CreateChainInput = z
-  .object({ ...chainShape, schedule: z.object(scheduleShape).superRefine(checkScheduleValues) })
-  .superRefine(checkChainDates);
-
-export const UpdateChainInput = z.object({ chainId: z.uuid(), ...chainShape }).superRefine(checkChainDates);
 
 function canManageMinistryChains(ctx: RequestContext, ministryId: string | null | undefined) {
   return grantsFor(ctx, 'prayer.manage').some(
@@ -78,9 +43,7 @@ export async function createChain(db: Database, ctx: RequestContext, raw: unknow
   await assertMinistryExists(db, input.ministryId);
 
   return db.transaction(async (tx) => {
-    const [reportForm] = input.collectReports
-      ? await tx.select({ id: forms.id }).from(forms).where(eq(forms.key, PRAYER_REPORT_FORM_KEY))
-      : [];
+    const reportFormId = input.collectReports ? await ensurePrayerReportForm(tx) : null;
     const [chain] = await tx
       .insert(prayerChains)
       .values({
@@ -95,14 +58,14 @@ export async function createChain(db: Database, ctx: RequestContext, raw: unknow
         checkinOpensMinutes: input.checkinOpensMinutes,
         requireCheckin: input.requireCheckin,
         showNamesPublicly: input.showNamesPublicly,
-        reportFormId: reportForm?.id ?? null,
+        reportFormId,
         createdBy: actorUserId(ctx),
       })
       .returning();
     const { schedule } = input;
     await tx.insert(prayerChainSchedules).values({
       prayerChainId: chain!.id,
-      rrule: schedule.rrule.toUpperCase(),
+      rrule: formatRecurrence(parseRecurrence(schedule.rrule)!),
       firstSlotTime: `${schedule.firstSlotTime}:00`,
       slotMinutes: schedule.slotMinutes,
       slotsPerOccurrence: schedule.slotsPerOccurrence,
@@ -135,7 +98,6 @@ export async function updateChain(db: Database, ctx: RequestContext, raw: unknow
       const [slots] = await tx.select({ n: count() }).from(prayerSlots).where(eq(prayerSlots.prayerChainId, chain.id));
       if ((slots?.n ?? 0) > 0) throw validationError({ timezone: ['The time zone can’t change once slots have been created.'] });
     }
-    const [reportForm] = input.collectReports ? await tx.select({ id: forms.id }).from(forms).where(eq(forms.key, PRAYER_REPORT_FORM_KEY)) : [];
     const next = {
       name: input.name,
       description: input.description ?? null,
@@ -148,7 +110,7 @@ export async function updateChain(db: Database, ctx: RequestContext, raw: unknow
       checkinOpensMinutes: input.checkinOpensMinutes,
       requireCheckin: input.requireCheckin,
       showNamesPublicly: input.showNamesPublicly,
-      reportFormId: input.collectReports ? (chain.reportFormId ?? reportForm?.id ?? null) : null,
+      reportFormId: input.collectReports ? (chain.reportFormId ?? (await ensurePrayerReportForm(tx))) : null,
     };
     await tx
       .update(prayerChains)
@@ -202,10 +164,11 @@ export async function setChainStatus(db: Database, ctx: RequestContext, raw: unk
 
 // ─── Lists and detail ─────────────────────────────────────────────────────────
 
-async function todayCoverage(db: Database, chain: ChainRow, now: Date) {
+/** Coverage of the chain's slots on its own "today": covered, completed, and follow-ups waiting. */
+export async function todayCoverage(executor: Executor, chain: ChainRow, now: Date) {
   const today = chainToday(chain, now);
   const [coverage] = await queryRows<{ total: number; covered: number; completed: number }>(
-    db,
+    executor,
     sql`SELECT count(*)::int AS total,
                count(*) FILTER (WHERE EXISTS (SELECT 1 FROM prayer_assignments pa WHERE pa.slot_id = s.id
                                                AND pa.status NOT IN ('replaced', 'cancelled', 'excused')))::int AS covered,
@@ -215,7 +178,7 @@ async function todayCoverage(db: Database, chain: ChainRow, now: Date) {
          WHERE s.prayer_chain_id = ${chain.id}::uuid AND s.status = 'open' AND s.chain_date = ${today}::date`,
   );
   const [followUps] = await queryRows<{ n: number }>(
-    db,
+    executor,
     sql`SELECT count(*)::int AS n FROM prayer_assignments pa JOIN prayer_slots s ON s.id = pa.slot_id
          WHERE s.prayer_chain_id = ${chain.id}::uuid AND pa.status = 'needs_follow_up'`,
   );
@@ -244,6 +207,7 @@ export async function listChains(db: Database, ctx: RequestContext) {
       name: chain.name,
       chainType: chain.chainType,
       status: chain.status,
+      ministryId: chain.ministryId,
       ministryName,
       timezone: chain.timezone,
       coverage: await todayCoverage(db, chain, ctx.now),

@@ -8,33 +8,15 @@ import { conflict, invalidState, notFound, validationError } from '../../errors'
 import { parseInput } from '../../validation';
 import { recordAudit } from '../audit/audit.service';
 import { addDays } from '../journal/journal-dates';
-import { actorFromContext, chainForActor, chainToday, later, timeOfDay } from './common';
+import { actorFromContext, chainForActor, chainToday, later } from './common';
 import { generateChainSlots } from './generation.service';
+import { CommitmentInput } from './prayer.schemas';
 import { expandDates, formatRecurrence, occursOn, parseRecurrence } from './recurrence';
 import { chainLocalTime, slotsForOccurrence } from './slot-times';
 
 /** Standing commitments: "Mary prays every Tuesday at 2:00 AM" (docs/05 W11, FR-PRY-03). */
 
 const MATCH_CHECK_DAYS = 28;
-
-export const CommitmentInput = z
-  .object({
-    chainId: z.uuid(),
-    personId: z.uuid(),
-    rrule: z
-      .string()
-      .trim()
-      .max(200)
-      .refine((rule) => parseRecurrence(rule) !== null, 'Choose the days'),
-    localStartTime: timeOfDay,
-    effectiveFrom: z.iso.date(),
-    effectiveTo: z.preprocess((v) => (v === '' ? null : v), z.iso.date().nullish()),
-  })
-  .superRefine((value, ctx) => {
-    if (value.effectiveTo && value.effectiveTo < value.effectiveFrom) {
-      ctx.addIssue({ code: 'custom', path: ['effectiveTo'], message: 'The end date must be on or after the start date.' });
-    }
-  });
 
 export async function createCommitment(db: Database, ctx: RequestContext, raw: unknown) {
   const input = parseInput(CommitmentInput, raw);

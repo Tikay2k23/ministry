@@ -1,6 +1,6 @@
 'use client';
 
-import { Church, ClipboardList, HeartHandshake, LayoutDashboard, Network, NotebookPen, ShieldCheck, UsersRound, UserRoundCog } from 'lucide-react';
+import { Bell, Church, ClipboardList, HandHeart, HeartHandshake, LayoutDashboard, Network, NotebookPen, ShieldCheck, UsersRound, UserRoundCog } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -9,12 +9,14 @@ import type { NavItem } from './nav-items';
 const ICONS = {
   dashboard: LayoutDashboard,
   journal: NotebookPen,
+  prayer: HandHeart,
   followups: HeartHandshake,
   reports: ClipboardList,
   people: UsersRound,
   leadership: Network,
   ministries: Church,
   users: UserRoundCog,
+  notifications: Bell,
   account: ShieldCheck,
 } as const;
 
@@ -52,6 +54,12 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
                 >
                   <Icon aria-hidden className="size-5" />
                   {item.label}
+                  {item.count ? (
+                    <span className="tabular ml-auto rounded-full bg-brand-deep px-2 py-0.5 text-xs font-semibold text-white">
+                      {item.count}
+                      <span className="sr-only"> unread</span>
+                    </span>
+                  ) : null}
                 </Link>
               );
             })}

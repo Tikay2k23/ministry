@@ -343,9 +343,11 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
 - **Jobs so far** (`src/server/modules/scheduler/jobs.ts`) run on intervals rather than at wall-clock times:
   - `journal.ledger` every 5 minutes: the open, resync and close steps above. Days now close on time even when nobody visits; the calls on each journal request remain.
   - `prayer.generate_slots` hourly.
+  - `prayer.check_overdue` every 5 minutes: once the grace time has passed, a slot nobody marked finished becomes `needs_follow_up`, a care follow-up opens, and the chain's coordinators get an in-app notice.
+  - `prayer.slot_reminders` every 5 minutes: a reminder 24 hours before a slot (for assignments made at least 20 hours ahead) and 30 minutes before (made at least 40 minutes ahead), each sent at most once per assignment.
   - `tokens.cleanup` daily.
   - `notifications.deliver` every minute.
-  - `prayer.slot_reminders` and `prayer.check_overdue` come with the rest of M3; journal reminders and leader digests later.
+  - Journal reminders and leader digests come later.
 - **Failures:** a failed job is retried after 5 minutes. Its last error is stored without personal data (`errorSummary` in `src/server/logger.ts`) for Settings → System health.
 
 ---

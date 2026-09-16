@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { formatClockTime, formatSlotRange } from '@/lib/time-range';
+import { formatSlotRange } from '@/lib/time-range';
 import type { RequestContext } from '../../context/request-context';
 import type { Database } from '../../db/client';
 import { prayerChainSchedules } from '../../db/schema';
@@ -8,49 +8,15 @@ import { invalidState, notFound, validationError } from '../../errors';
 import { parseInput } from '../../validation';
 import { recordAudit } from '../audit/audit.service';
 import { addDays } from '../journal/journal-dates';
-import { actorFromContext, chainForActor, chainToday, later, timeOfDay } from './common';
+import { actorFromContext, chainForActor, chainToday, later } from './common';
 import { cancelUpcomingSlots, generateChainSlots } from './generation.service';
-import { describeRecurrence, expandDates, formatRecurrence, parseRecurrence } from './recurrence';
+import { AddScheduleInput, type ScheduleLike } from './prayer.schemas';
+import { expandDates, formatRecurrence, parseRecurrence } from './recurrence';
 import { slotsForOccurrence, type SlotTime } from './slot-times';
 
 /** Slot patterns for a chain (docs/04 A18, docs/02a `prayer.schedules.upsert`). */
 
 const OVERLAP_CHECK_DAYS = 60;
-
-export const scheduleShape = {
-  rrule: z
-    .string()
-    .trim()
-    .max(200)
-    .refine((rule) => parseRecurrence(rule) !== null, 'Choose how often it repeats'),
-  firstSlotTime: timeOfDay,
-  slotMinutes: z.coerce.number().int().min(5, 'Slots are at least 5 minutes').max(1440),
-  slotsPerOccurrence: z.coerce.number().int().min(1).max(288),
-  capacity: z.coerce.number().int().min(1).max(50).default(1),
-  effectiveFrom: z.iso.date(),
-  effectiveTo: z.iso.date().nullish(),
-  generateDaysAhead: z.coerce.number().int().min(1).max(90).default(14),
-};
-
-type ScheduleValues = { slotMinutes: number; slotsPerOccurrence: number; effectiveFrom: string; effectiveTo?: string | null };
-
-export function checkScheduleValues(value: ScheduleValues, ctx: { addIssue: (issue: { code: 'custom'; path: string[]; message: string }) => void }) {
-  if (value.slotMinutes * value.slotsPerOccurrence > 1440) {
-    ctx.addIssue({ code: 'custom', path: ['slotsPerOccurrence'], message: 'One occurrence can be at most 24 hours long.' });
-  }
-  if (value.effectiveTo && value.effectiveTo < value.effectiveFrom) {
-    ctx.addIssue({ code: 'custom', path: ['effectiveTo'], message: 'The end date must be on or after the start date.' });
-  }
-}
-
-export interface ScheduleLike {
-  rrule: string;
-  firstSlotTime: string;
-  slotMinutes: number;
-  slotsPerOccurrence: number;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-}
 
 /** The first slot that would overlap another when all schedules are expanded over `range` (pure). */
 export function findScheduleOverlap(schedules: ScheduleLike[], range: { from: string; to: string }, timeZone: string): SlotTime | null {
@@ -70,19 +36,6 @@ export function findScheduleOverlap(schedules: ScheduleLike[], range: { from: st
   }
   return null;
 }
-
-/** "Every day · 24 slots of 60 minutes from 12:00 AM" */
-export function describeSchedule(schedule: Pick<ScheduleLike, 'rrule' | 'firstSlotTime' | 'slotMinutes' | 'slotsPerOccurrence'>): string {
-  const rule = parseRecurrence(schedule.rrule);
-  const repeat = rule ? describeRecurrence(rule) : 'Custom pattern';
-  const slots =
-    schedule.slotsPerOccurrence === 1
-      ? `one ${schedule.slotMinutes}-minute slot`
-      : `${schedule.slotsPerOccurrence} slots of ${schedule.slotMinutes} minutes`;
-  return `${repeat} · ${slots} from ${formatClockTime(schedule.firstSlotTime)}`;
-}
-
-export const AddScheduleInput = z.object({ chainId: z.uuid(), ...scheduleShape }).superRefine(checkScheduleValues);
 
 export async function addSchedule(db: Database, ctx: RequestContext, raw: unknown) {
   const input = parseInput(AddScheduleInput, raw);

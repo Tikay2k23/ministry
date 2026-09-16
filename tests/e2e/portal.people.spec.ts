@@ -1,17 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { E2E_ADMIN_EMAIL, E2E_LEADER, E2E_MEMBER, E2E_PASTOR } from './support/e2e-env';
-import { firstLink, waitForEmail } from './support/outbox';
+import { signIn } from './support/sign-in';
 
 test('an administrator signs in with a magic link and finds people and the leadership structure', async ({ page }) => {
-  const requestedAt = new Date(Date.now() - 1_000);
-  await page.goto('/sign-in');
-  await page.getByLabel('Email address').fill(E2E_ADMIN_EMAIL);
-  await page.getByRole('button', { name: 'Email me a sign-in link' }).click();
-  await expect(page.getByText('Check your email')).toBeVisible();
-
-  const email = await waitForEmail(E2E_ADMIN_EMAIL, requestedAt);
-  await page.goto(firstLink(email.text));
-  await expect(page).toHaveURL(/\/app$/);
+  await signIn(page, E2E_ADMIN_EMAIL);
 
   const nav = page.getByRole('navigation', { name: 'Main' });
 

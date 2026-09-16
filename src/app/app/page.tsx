@@ -6,8 +6,9 @@ import { formatLongDate, greeting } from '@/lib/dates';
 import { countOpenFollowUps } from '@/server/modules/care/care.service';
 import { getJournalOverview, listAwaitingReview } from '@/server/modules/journal/journal-portal.service';
 import { listUnconfirmedRegistrations } from '@/server/modules/people/registrations.service';
+import { listChains } from '@/server/modules/prayer/chains.service';
 import { getSetting } from '@/server/modules/settings/settings.service';
-import { hasPermission } from '@/server/policy/can';
+import { canAccessChain, hasChainScope, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
 
@@ -24,14 +25,26 @@ export default async function DashboardPage() {
 
   // Journal first: it also runs the day's ledger maintenance the other counts rely on.
   const journal = hasPermission(ctx, 'journal.status.view') ? await getJournalOverview(db, ctx, {}) : null;
-  const [awaiting, followUps, registrations] = await Promise.all([
+  const [awaiting, followUps, registrations, chains] = await Promise.all([
     hasPermission(ctx, 'journal.review') ? listAwaitingReview(db, ctx, {}) : Promise.resolve(null),
     countOpenFollowUps(db, ctx),
     hasPermission(ctx, 'people.registrations.confirm') ? listUnconfirmedRegistrations(db, ctx, {}) : Promise.resolve(null),
+    hasChainScope(ctx, 'prayer.view') ? listChains(db, ctx) : Promise.resolve(null),
   ]);
+
+  // Prayer slots waiting for a coordinator, in the chains this user resolves.
+  const resolvableChains = (chains ?? []).filter((chain) => canAccessChain(ctx, 'prayer.resolve', chain));
+  const prayerFollowUps = resolvableChains.reduce((sum, chain) => sum + chain.coverage.followUps, 0);
+  const chainsWithFollowUps = resolvableChains.filter((chain) => chain.coverage.followUps > 0);
 
   const attention = [
     awaiting && awaiting.total > 0 ? { href: '/app/journal/review', label: `${plural(awaiting.total, 'journal')} waiting for review` } : null,
+    prayerFollowUps > 0
+      ? {
+          href: chainsWithFollowUps.length === 1 ? `/app/prayer/${chainsWithFollowUps[0]!.id}` : '/app/prayer',
+          label: `${plural(prayerFollowUps, 'prayer slot')} to follow up`,
+        }
+      : null,
     followUps.mine > 0
       ? { href: '/app/follow-ups?assigned=me', label: `${plural(followUps.mine, 'follow-up')} with you` }
       : followUps.open > 0
@@ -41,7 +54,8 @@ export default async function DashboardPage() {
       ? { href: '/app/people/registrations', label: `${plural(registrations.total, 'new registration')} to confirm` }
       : null,
   ].filter((item): item is { href: string; label: string } => item !== null);
-  const showAttention = hasPermission(ctx, 'journal.review') || hasPermission(ctx, 'care.view') || registrations !== null;
+  const showAttention =
+    hasPermission(ctx, 'journal.review') || hasPermission(ctx, 'care.view') || registrations !== null || resolvableChains.length > 0;
 
   const checklist = [
     { label: 'Turn on two-step verification', done: user.twoFactorEnabled, href: '/app/account/security' },
@@ -52,6 +66,53 @@ export default async function DashboardPage() {
 
   const s = journal?.summary;
   const percent = s && s.expected > 0 ? Math.round((s.received / s.expected) * 100) : 0;
+
+  const runningChains = (chains ?? []).filter((chain) => chain.status === 'active');
+  const prayerSection = chains && (
+    <section aria-labelledby="prayer-today" className="space-y-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="prayer-today" className="text-lg">
+          Prayer Chain today
+        </h2>
+        <Link href="/app/prayer" className="text-sm font-medium text-brand-deep hover:underline">
+          Open
+        </Link>
+      </div>
+      {runningChains.length === 0 ? (
+        <p className="text-muted">No prayer chain is running right now.</p>
+      ) : (
+        <ul className="space-y-4">
+          {runningChains.slice(0, 5).map((chain) => {
+            const covered = chain.coverage.total > 0 ? Math.round((chain.coverage.covered / chain.coverage.total) * 100) : 0;
+            return (
+              <li key={chain.id} className="space-y-1.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <Link href={`/app/prayer/${chain.id}`} className="font-medium hover:text-brand-deep hover:underline">
+                    {chain.name}
+                  </Link>
+                  <span className="tabular text-sm text-muted">
+                    {chain.coverage.total === 0 ? 'No slots today' : `${chain.coverage.covered} of ${chain.coverage.total} slots covered`}
+                  </span>
+                </div>
+                {chain.coverage.total > 0 && (
+                  <div
+                    role="progressbar"
+                    aria-label={`${chain.name}: slots covered today`}
+                    aria-valuemin={0}
+                    aria-valuemax={chain.coverage.total}
+                    aria-valuenow={chain.coverage.covered}
+                    className="h-2 overflow-hidden rounded-full bg-ink/5"
+                  >
+                    <div className="h-full rounded-full bg-status-received" style={{ width: `${covered}%` }} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 
   return (
     <div className="space-y-8">
@@ -118,12 +179,14 @@ export default async function DashboardPage() {
             )}
           </section>
         ) : (
-          <section className="rounded-[var(--radius-card)] border border-dashed border-line-strong p-6 text-center">
-            <p className="font-display text-lg font-bold">Ministry Today</p>
-            <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-              Daily Journal, Prayer Chain and Morning Devotional appear here for leaders and pastors.
-            </p>
-          </section>
+          (prayerSection ?? (
+            <section className="rounded-[var(--radius-card)] border border-dashed border-line-strong p-6 text-center">
+              <p className="font-display text-lg font-bold">Ministry Today</p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted">
+                Daily Journal, Prayer Chain and Morning Devotional appear here for leaders and pastors.
+              </p>
+            </section>
+          ))
         )}
 
         {showAttention && (
@@ -148,6 +211,8 @@ export default async function DashboardPage() {
           </section>
         )}
       </div>
+
+      {journal && s && prayerSection && <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">{prayerSection}</div>}
 
       {canManageUsers && (
         <section aria-labelledby="setup" className="rounded-[var(--radius-card)] border border-line bg-surface p-6">

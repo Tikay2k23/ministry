@@ -40,11 +40,11 @@ export function useActionForm<Input extends FieldValues, Output extends FieldVal
               onSuccess?.(result.data);
               return;
             }
-            const fieldErrors = Object.entries(result.error.fieldErrors ?? {});
-            for (const [name, messages] of fieldErrors) {
+            for (const [name, messages] of Object.entries(result.error.fieldErrors ?? {})) {
               form.setError(name as Path<Input>, { type: 'server', message: messages.join(' ') });
             }
-            if (fieldErrors.length === 0) setFormError(result.error.message);
+            // Also as one message, in case an error belongs to a field this form doesn't show.
+            setFormError(result.error.message);
           } finally {
             resolve();
           }

@@ -4,13 +4,18 @@ import { BrandMark } from '@/components/brand/brand-mark';
 import { NAV_ITEMS } from '@/components/portal/nav-items';
 import { SidebarNav } from '@/components/portal/sidebar-nav';
 import { Button } from '@/components/ui/button';
-import { hasPermission } from '@/server/policy/can';
+import { countUnreadNotifications } from '@/server/modules/notifications/notifications.service';
+import { hasChainScope, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
+import { getDb } from '@/server/next/db';
 import { signOutAction } from './actions';
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const { ctx, user } = await requirePortal();
-  const items = NAV_ITEMS.filter((item) => !item.permission || hasPermission(ctx, item.permission));
+  const unread = await countUnreadNotifications(getDb(), ctx);
+  const items = NAV_ITEMS.filter(
+    (item) => !item.permission || (item.chainScope ? hasChainScope(ctx, item.permission) : hasPermission(ctx, item.permission)),
+  ).map((item) => (item.icon === 'notifications' ? { ...item, count: unread } : item));
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[260px_1fr]">

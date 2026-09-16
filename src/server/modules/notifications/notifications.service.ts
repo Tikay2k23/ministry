@@ -71,7 +71,8 @@ export async function listInbox(db: Database, ctx: RequestContext, raw: unknown)
       })
       .from(notifications)
       .where(where)
-      .orderBy(desc(notifications.createdAt), desc(notifications.id))
+      // Unread first (docs/04 A24), newest first within each.
+      .orderBy(sql`${notifications.readAt} IS NULL DESC`, desc(notifications.createdAt), desc(notifications.id))
       .limit(INBOX_PAGE_SIZE)
       .offset((page - 1) * INBOX_PAGE_SIZE),
     db

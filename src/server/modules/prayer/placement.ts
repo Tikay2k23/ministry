@@ -72,6 +72,9 @@ export async function placeAssignment(
           substituteForId: input.substituteForId ?? null,
           createdBy: input.createdBy,
           note: input.note ?? null,
+          // The service clock, not the database's: reminders measure notice from when someone was assigned.
+          createdAt: input.now,
+          updatedAt: input.now,
         })
         .returning({ id: prayerAssignments.id });
       return row!.id;

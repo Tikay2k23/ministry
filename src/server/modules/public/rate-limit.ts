@@ -25,6 +25,8 @@ export const RATE_LIMITS = {
   submitPerPerson: { limit: 10, windowSeconds: 60 },
   leaderSearchPerIp: { limit: 60, windowSeconds: 60 },
   personalLinkPerIp: { limit: 10, windowSeconds: 15 * 60 },
+  prayerRespondPerIp: { limit: 60, windowSeconds: 15 * 60 },
+  prayerReportPerIp: { limit: 10, windowSeconds: 60 * 60 },
 } satisfies Record<string, RateLimitRule>;
 
 /**

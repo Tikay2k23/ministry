@@ -31,7 +31,12 @@ describe('background jobs (docs/02 §7 note)', () => {
 
   it('runs each job again once its own interval has passed', async () => {
     const results = await runDueJobs(handle.db, JOBS, at('2026-09-16T01:06:00Z'));
-    expect(results.filter((r) => r.status === 'ok').map((r) => r.key).sort()).toEqual(['journal.ledger', 'notifications.deliver']);
+    expect(results.filter((r) => r.status === 'ok').map((r) => r.key).sort()).toEqual([
+      'journal.ledger',
+      'notifications.deliver',
+      'prayer.check_overdue',
+      'prayer.slot_reminders',
+    ]);
 
     const status = await listJobStatus(handle.db);
     expect(status.find((s) => s.jobKey === 'journal.ledger')?.runCount).toBe(2);

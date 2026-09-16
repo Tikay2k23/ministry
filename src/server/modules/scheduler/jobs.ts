@@ -1,6 +1,7 @@
 import { ensureJournalLedger } from '../journal/ledger.service';
 import { deliverDueNotifications } from '../notifications/delivery.service';
 import { generateUpcomingSlots } from '../prayer/generation.service';
+import { flagOverdueAssignments, sendSlotReminders } from '../prayer/prayer-jobs.service';
 import { cleanupExpiredRecords } from './cleanup.service';
 import type { JobDefinition } from './scheduler.service';
 
@@ -22,6 +23,8 @@ export const JOBS: readonly JobDefinition[] = [
     },
   },
   { key: 'prayer.generate_slots', everyMinutes: 60, run: generateUpcomingSlots },
+  { key: 'prayer.check_overdue', everyMinutes: 5, run: flagOverdueAssignments },
+  { key: 'prayer.slot_reminders', everyMinutes: 5, run: sendSlotReminders },
   { key: 'tokens.cleanup', everyMinutes: 24 * 60, run: cleanupExpiredRecords },
   { key: 'notifications.deliver', everyMinutes: 1, run: deliverDueNotifications },
 ];

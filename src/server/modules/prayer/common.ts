@@ -1,17 +1,17 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { RequestContext } from '../../context/request-context';
 import type { Executor } from '../../db/client';
 import type { PrayerEventType } from '../../db/enums';
-import { prayerAssignmentEvents, prayerChains } from '../../db/schema';
+import { careFollowups, prayerAssignmentEvents, prayerChains } from '../../db/schema';
 import { notFound } from '../../errors';
 import { assertChainAccess } from '../../policy/can';
 import type { PermissionKey } from '../../policy/catalog';
 import { localDate } from '../journal/journal-dates';
 
-/** Shared helpers for the prayer chain module (docs/03 §4.11, docs/05 W10–W14). */
+export { optionalText, timeOfDay } from './prayer.schemas';
 
-export const PRAYER_REPORT_FORM_KEY = 'prayer_report';
+/** Shared helpers for the prayer chain module (docs/03 §4.11, docs/05 W10–W14). */
 
 export type ChainRow = typeof prayerChains.$inferSelect;
 
@@ -71,13 +71,16 @@ export async function recordPrayerEvent(
   });
 }
 
-export const optionalText = (max: number) =>
-  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().trim().max(max).optional());
+/** The single care follow-up raised for an assignment that needs follow-up (docs/05 W13). */
+export const prayerFollowUpKey = (assignmentId: string) => `prayer_follow_up:${assignmentId}`;
 
-export const timeOfDay = z
-  .string()
-  .trim()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Enter a time like 06:00');
+/** Closes an assignment's open follow-up: the coordinator resolved it, or the person marked the slot finished late. */
+export async function closePrayerFollowUp(executor: Executor, assignmentId: string, input: { note: string | null; resolvedBy: string | null; now: Date }) {
+  await executor
+    .update(careFollowups)
+    .set({ status: 'resolved', resolutionNote: input.note, resolvedBy: input.resolvedBy, resolvedAt: input.now, updatedAt: input.now })
+    .where(and(eq(careFollowups.dedupeKey, prayerFollowUpKey(assignmentId)), inArray(careFollowups.status, ['open', 'in_progress'])));
+}
 
 export const later = (a: string, b: string) => (a > b ? a : b);
 export const earlier = (a: string, b: string) => (a < b ? a : b);
