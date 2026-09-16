@@ -22,7 +22,7 @@
 | M1 · People & Hierarchy | ✅ Done 2026-09-14 | 64 integration tests (incl. hierarchy property tests, scope/IDOR cases, import), production build, 20-check HTTP smoke test on a 1,885-person demo ministry |
 | M2 · Daily Journal | ✅ Done 2026-09-15 | 121 tests in 18 files, covering ledger time-travel, idempotent and concurrent submissions, identification, content visibility by sensitivity tier, review, pauses and rest days, proxy journals, registrations, reports and CSV. Also a production build (49 routes), a 35-check public-journal HTTP smoke test and an 8-check reports smoke test on the demo ministry |
 | Stack alignment | ✅ Done 2026-09-15 | The approved stack adopted without rewriting M1–M2 (docs/02 §1 note): row-level security baseline (migration 0007), in-app scheduler triggered by Supabase Cron, Upstash rate limiting, Sentry, structured logs, shadcn/ui, React Hook Form, TanStack Table, Recharts, Node 24 and GitHub Actions. Verified by type-check, lint, 152 tests in 24 files, a production build (51 routes) and 2 Playwright end-to-end tests (portal sign-in → people → leadership → journal on desktop; the public journal on a phone). Not yet exercised against real Supabase, Upstash, Sentry or GitHub, which need accounts |
-| M3 · Prayer Chain | In progress | Written so far: schema, migrations 0005–0006, the chain, schedule, commitment and slot-generation services, the scheduler and notification delivery. Next: public pages, portal screens, reminder and overdue jobs, integration tests |
+| M3 · Prayer Chain | ✅ Done 2026-09-16 | Built: chains, schedules, standing commitments, slot generation, assignments, substitutes and coordinator follow-up; the public chain page and personal links; the portal chain list, board and setup pages; slot reminders and the overdue check; the in-app inbox; the dashboard tile; the completion report with CSV. Verified by type-check, lint, 167 tests in 25 files (19 for the prayer chain and scheduler, covering time zones and midnight, grace and follow-up, scope, anonymity and reports), a production build (63 routes) and 3 Playwright end-to-end tests. The new test creates and starts a chain, assigns a member, shares their link, confirms on a phone and finds the slot on the chain page. The 7-day staging run is still to do (see the gaps below) |
 
 Implementation changes are recorded as notes in docs/02, 02a, 03 and 06.
 
@@ -42,6 +42,15 @@ Known M2 gaps, planned for later:
 - a PWA manifest
 - a participant history view (V1)
 - converting the M0 invite form to the onSubmit pattern
+
+Known M3 gaps, planned for later:
+- the exit criterion itself: a 24-hour chain running for 7 days in staging with simulated participants (it needs a staging environment)
+- status and person filters on the chain board
+- unavailability warnings when assigning
+- a leader's view of their own people's prayer participation (docs/06 note g)
+- ending a schedule that hasn't started yet leaves its first day in place
+- the notification template editor and delivery log (A24)
+- a visual walkthrough on a phone (so far the screens are exercised only by Playwright)
 
 ## 2. MVP (Priority 1–4)
 

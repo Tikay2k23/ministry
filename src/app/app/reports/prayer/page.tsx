@@ -139,14 +139,14 @@ export default async function PrayerReportPage({ searchParams }: { searchParams:
             <>
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
-                  { label: 'Slots', value: count(data.totals.slots), note: null },
-                  { label: 'Covered', value: count(data.totals.covered), note: share(data.totals.covered, data.totals.slots) },
-                  { label: 'Prayed', value: count(data.totals.prayed), note: share(data.totals.prayed, data.totals.slots) },
-                  { label: 'Needs follow-up', value: count(data.totals.followUp), note: null },
+                  { label: 'Slots', value: data.totals.slots, note: null },
+                  { label: 'Covered', value: data.totals.covered, note: share(data.totals.covered, data.totals.slots) },
+                  { label: 'Prayed', value: data.totals.prayed, note: share(data.totals.prayed, data.totals.slots) },
+                  { label: 'Needs follow-up', value: data.totals.followUp, note: null },
                 ].map((tile) => (
                   <li key={tile.label} className="rounded-[var(--radius-card)] border border-line bg-surface p-4">
                     <p className="text-sm text-muted">{tile.label}</p>
-                    <p className="tabular font-display text-3xl font-extrabold">{tile.value}</p>
+                    <p className="tabular font-display text-3xl font-extrabold">{tile.value.toLocaleString('en-PH')}</p>
                     {tile.note && <p className="text-xs text-muted">{tile.note} of slots</p>}
                   </li>
                 ))}

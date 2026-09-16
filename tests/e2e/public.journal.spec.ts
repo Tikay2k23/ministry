@@ -23,6 +23,7 @@ test('a member finds themselves by mobile number and sends today’s journal', a
 
   await expect(page.getByRole('heading', { name: `Thank you, ${E2E_MEMBER.firstName}!` })).toBeVisible();
   await page.getByRole('button', { name: 'Back to my journal' }).click();
-  // While yesterday's journal is still open (before the 09:00 late cutoff) the page moves on to it, so check today's tab.
-  await expect(page.getByRole('tab', { name: 'Today received' })).toBeVisible();
+  // After the 09:00 late cutoff the page shows today's receipt. Before it, yesterday's journal is still open, so the
+  // page moves on to yesterday and marks today's tab as received instead.
+  await expect(page.getByText('Journal received').or(page.getByRole('tab', { name: 'Today received' })).first()).toBeVisible();
 });

@@ -175,6 +175,28 @@ Every mutation writes an `audit_logs` row in the same transaction. Operations ma
 | `prayer.getReport` 🔍 | `prayer.reports.view` (+ pastoral for requests marked confidential) | `{ assignmentId }` | report answers (anonymity respected) | `NOT_FOUND` |
 | `prayer.shareLink` | `prayer.assign` | `{ assignmentId }` | `{ url, expiresAt }` (new token; previous revoked) | `INVALID_STATE` |
 
+**Implementation note (M3, 2026-09-16).** How the prayer chain operations were built, and where they differ from the table above:
+- **Portal:** pages call the services in `src/server/modules/prayer/` through server actions (`src/app/app/prayer/actions.ts`). The services check permission and chain scope on every call. `GET /api/prayer/people?chainId=&q=` finds people to put on a slot.
+- **Public:** JSON route handlers, like the journal: the same response shape, same-origin mutations, and the device key in the HttpOnly cookie.
+
+| Route | Operation |
+|---|---|
+| `GET /api/public/prayer/chain?code=&scan=1` | `prayer.getChainPage`. Returns `{ formSession, status, chain: { name, description, state, timezone }, now: { slotLabel, prayingCount, prayingFirstNames }, coverageToday: { covered, total }, participant: { firstName, slots } }`. First names appear only when the chain allows it |
+| `POST /api/public/prayer/respond` | `prayer.respond`, with `{ token }` from `/a/{token}`, or `{ assignmentId }` plus the device key. The report is sent separately |
+| `POST /api/public/prayer/report` | The optional report: `{ token \| assignmentId, answers, anonymous, formSession }`, once per assignment (`CONFLICT`, reason `ALREADY_SUBMITTED`) |
+
+- **`prayer.slots.generate`** has no endpoint and no "Generate now" button. Slots are generated when a chain starts, when a schedule or commitment is added, and hourly by the `prayer.generate_slots` job, each schedule `generateDaysAhead` days ahead.
+- **`prayer.schedules.upsert`** is *add* and *end*:
+  - A schedule is never edited in place, so slots already generated stay consistent. Ending one cancels its upcoming slots.
+  - The browser previews the next 3 occurrences with the same functions the service uses.
+- **`prayer.shareLink`** doesn't revoke earlier links:
+  - A reminder email and a link the coordinator shared can both be in use. All of an assignment's links are revoked when it is replaced or cancelled.
+  - A link is valid until 7 days after the slot ends (not `ends_at + grace + 24 h`), so a late "I've finished" and the report still work.
+- **`prayer.assign`** searches confirmed people by name or person code, with those who already pray in the chain first. Unavailability warnings aren't shown yet.
+- **`prayer.board`** also returns the follow-up queue, the "needs a substitute" list and what the viewer may do (`can`). The status and person filters aren't built yet.
+- **Completion report (FR-RPT-02):** `/app/reports/prayer` and `GET /api/reports/prayer.csv?tab=days|people&chainId=&from=&to=` (audited as `report.exported`), scoped by `prayer.view` on the chain.
+- **Inbox (A24):** `/app/notifications`, unread first, with the unread count in the navigation. The template editor and delivery log come later.
+
 ### 3.7 Devotional / worship
 | Operation | Authorisation | Input | Output | Errors |
 |---|---|---|---|---|
