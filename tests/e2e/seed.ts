@@ -5,6 +5,7 @@ import { users } from '@/server/db/schema';
 import { seedReferenceData } from '@/server/db/seed/reference-data';
 import { ensureSuperAdmin } from '@/server/db/seed/super-admin';
 import { placePerson } from '@/server/modules/hierarchy/hierarchy.service';
+import { createMinistry } from '@/server/modules/ministries/ministries.service';
 import { createPerson } from '@/server/modules/people/people.service';
 import { loadGrants } from '@/server/policy/grants';
 import { userContext } from '../helpers/fixtures';
@@ -12,7 +13,8 @@ import { E2E_ADMIN_EMAIL, E2E_LEADER, E2E_MEMBER, E2E_PASTOR } from './support/e
 
 /**
  * Test data for the end-to-end tests, created through the same services the portal uses:
- * a Super Admin, and a pastor → leader → member line where the member journals by phone.
+ * a Super Admin, a pastor → leader → member line where the member journals by phone, and a
+ * Worship ministry for the devotional test's worship team.
  */
 export async function seedE2eData(databaseUrl: string): Promise<void> {
   const handle = openDatabase(databaseUrl);
@@ -30,6 +32,7 @@ export async function seedE2eData(databaseUrl: string): Promise<void> {
     await placePerson(db, admin, { personId: pastor, leaderId: null });
     const { personId: leader } = await createPerson(db, admin, { ...E2E_LEADER, leaderId: pastor });
     await createPerson(db, admin, { ...E2E_MEMBER, leaderId: leader });
+    await createMinistry(db, admin, { name: 'Worship', code: 'WOR' });
   } finally {
     await handle.close();
   }

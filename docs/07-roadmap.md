@@ -23,6 +23,7 @@
 | M2 · Daily Journal | ✅ Done 2026-09-15 | 121 tests in 18 files, covering ledger time-travel, idempotent and concurrent submissions, identification, content visibility by sensitivity tier, review, pauses and rest days, proxy journals, registrations, reports and CSV. Also a production build (49 routes), a 35-check public-journal HTTP smoke test and an 8-check reports smoke test on the demo ministry |
 | Stack alignment | ✅ Done 2026-09-15 | The approved stack adopted without rewriting M1–M2 (docs/02 §1 note): row-level security baseline (migration 0007), in-app scheduler triggered by Supabase Cron, Upstash rate limiting, Sentry, structured logs, shadcn/ui, React Hook Form, TanStack Table, Recharts, Node 24 and GitHub Actions. Verified by type-check, lint, 152 tests in 24 files, a production build (51 routes) and 2 Playwright end-to-end tests (portal sign-in → people → leadership → journal on desktop; the public journal on a phone). Not yet exercised against real Supabase, Upstash, Sentry or GitHub, which need accounts |
 | M3 · Prayer Chain | ✅ Done 2026-09-16 | Built: chains, schedules, standing commitments, slot generation, assignments, substitutes and coordinator follow-up; the public chain page and personal links; the portal chain list, board and setup pages; slot reminders and the overdue check; the in-app inbox; the dashboard tile; the completion report with CSV. Verified by type-check, lint, 167 tests in 25 files (19 for the prayer chain and scheduler, covering time zones and midnight, grace and follow-up, scope, anonymity and reports), a production build (63 routes) and 3 Playwright end-to-end tests. The new test creates and starts a chain, assigns a member, shares their link, confirms on a phone and finds the slot on the chain page. The 7-day staging run is still to do (see the gaps below) |
+| M4 · Devotional / Worship | ✅ Done 2026-09-17 | Built: serving roles, gathering types with roster templates, worship teams (members, the roles they play, away dates), and schedules with team rotation (daily, weekly or monthly). Also generation with auto-fill, roster editing with warnings, publishing with personal links, accept or decline on a phone, substitute suggestions, cancelling, reminders, the devotional calendar and the dashboard card. Verified by type-check, lint, 186 tests in 27 files and a production build (70 routes). 19 of the tests are for the devotional module, covering both exit criteria: four weeks of rotation generated correctly, and manual edits surviving regeneration. There are 4 Playwright end-to-end tests. The new one builds a worship team, fills and publishes a roster, shares a member's link, accepts on a phone, and finds the reply on the roster and the dashboard. Every devotional page was also checked at phone width (375 px) |
 
 Implementation changes are recorded as notes in docs/02, 02a, 03 and 06.
 
@@ -51,6 +52,16 @@ Known M3 gaps, planned for later:
 - ending a schedule that hasn't started yet leaves its first day in place
 - the notification template editor and delivery log (A24)
 - a visual walkthrough on a phone (so far the screens are exercised only by Playwright)
+
+Known M4 gaps, planned for later:
+- the person profile's Serving section doesn't list serving roles and upcoming assignments yet (docs/04 A5)
+- the calendar's month view and team filter (docs/04 A19)
+- a per-person "remind" button on the roster (reminders are sent automatically 72 and 24 hours before)
+- reordering serving roles (docs/04 A21)
+- moving a gathering or changing its team (for now: cancel it and create a one-off gathering)
+- people marking their own away dates through their link (FR-DEV-08, V1)
+- the devotional reports (FR-RPT-03, V1)
+- the notification template editor and delivery log (A24, as for M3)
 
 ## 2. MVP (Priority 1–4)
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Church, ClipboardList, HandHeart, HeartHandshake, LayoutDashboard, Network, NotebookPen, ShieldCheck, UsersRound, UserRoundCog } from 'lucide-react';
+import { Bell, Church, ClipboardList, HandHeart, HeartHandshake, LayoutDashboard, Music, Network, NotebookPen, ShieldCheck, UsersRound, UserRoundCog } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -10,6 +10,7 @@ const ICONS = {
   dashboard: LayoutDashboard,
   journal: NotebookPen,
   prayer: HandHeart,
+  devotional: Music,
   followups: HeartHandshake,
   reports: ClipboardList,
   people: UsersRound,

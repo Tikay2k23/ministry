@@ -2,8 +2,10 @@ import { CheckCircle2, ChevronRight, Circle } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Alert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { formatLongDate, greeting } from '@/lib/dates';
 import { countOpenFollowUps } from '@/server/modules/care/care.service';
+import { getDevotionalOverview } from '@/server/modules/devotional/calendar.service';
 import { getJournalOverview, listAwaitingReview } from '@/server/modules/journal/journal-portal.service';
 import { listUnconfirmedRegistrations } from '@/server/modules/people/registrations.service';
 import { listChains } from '@/server/modules/prayer/chains.service';
@@ -11,6 +13,7 @@ import { getSetting } from '@/server/modules/settings/settings.service';
 import { canAccessChain, hasChainScope, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
+import { ReplyCounts } from './devotional/reply-counts';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 
@@ -25,11 +28,12 @@ export default async function DashboardPage() {
 
   // Journal first: it also runs the day's ledger maintenance the other counts rely on.
   const journal = hasPermission(ctx, 'journal.status.view') ? await getJournalOverview(db, ctx, {}) : null;
-  const [awaiting, followUps, registrations, chains] = await Promise.all([
+  const [awaiting, followUps, registrations, chains, devotional] = await Promise.all([
     hasPermission(ctx, 'journal.review') ? listAwaitingReview(db, ctx, {}) : Promise.resolve(null),
     countOpenFollowUps(db, ctx),
     hasPermission(ctx, 'people.registrations.confirm') ? listUnconfirmedRegistrations(db, ctx, {}) : Promise.resolve(null),
     hasChainScope(ctx, 'prayer.view') ? listChains(db, ctx) : Promise.resolve(null),
+    getDevotionalOverview(db, ctx),
   ]);
 
   // Prayer slots waiting for a coordinator, in the chains this user resolves.
@@ -45,6 +49,7 @@ export default async function DashboardPage() {
           label: `${plural(prayerFollowUps, 'prayer slot')} to follow up`,
         }
       : null,
+    ...(devotional?.attention ?? []),
     followUps.mine > 0
       ? { href: '/app/follow-ups?assigned=me', label: `${plural(followUps.mine, 'follow-up')} with you` }
       : followUps.open > 0
@@ -55,7 +60,11 @@ export default async function DashboardPage() {
       : null,
   ].filter((item): item is { href: string; label: string } => item !== null);
   const showAttention =
-    hasPermission(ctx, 'journal.review') || hasPermission(ctx, 'care.view') || registrations !== null || resolvableChains.length > 0;
+    hasPermission(ctx, 'journal.review') ||
+    hasPermission(ctx, 'care.view') ||
+    registrations !== null ||
+    resolvableChains.length > 0 ||
+    hasPermission(ctx, 'devotional.manage');
 
   const checklist = [
     { label: 'Turn on two-step verification', done: user.twoFactorEnabled, href: '/app/account/security' },
@@ -66,6 +75,52 @@ export default async function DashboardPage() {
 
   const s = journal?.summary;
   const percent = s && s.expected > 0 ? Math.round((s.received / s.expected) * 100) : 0;
+
+  const journalSection = journal && s && (
+    <section aria-labelledby="journal-today" className="space-y-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="journal-today" className="text-lg">
+          Daily Journal today
+        </h2>
+        <Link href="/app/journal" className="text-sm font-medium text-brand-deep hover:underline">
+          Open
+        </Link>
+      </div>
+      <p className="text-muted">
+        {journal.leader?.isSelf ? 'Your group' : 'The people you care for'}:{' '}
+        <strong className="tabular text-ink">
+          {s.received.toLocaleString('en-PH')} of {s.expected.toLocaleString('en-PH')}
+        </strong>{' '}
+        received
+        {s.late > 0 ? ` · ${s.late} late` : ''}
+        {s.notYet > 0 ? ` · ${s.notYet} not yet` : ''}
+      </p>
+      <div
+        role="progressbar"
+        aria-label="Journals received today"
+        aria-valuemin={0}
+        aria-valuemax={s.expected}
+        aria-valuenow={s.received}
+        className="h-2.5 overflow-hidden rounded-full bg-ink/5"
+      >
+        <div className="h-full rounded-full bg-status-received" style={{ width: `${percent}%` }} />
+      </div>
+      {journal.groups.length > 0 && (
+        <ul className="divide-y divide-line text-sm">
+          {journal.groups.slice(0, 6).map((g) => (
+            <li key={g.leaderId} className="flex items-center justify-between gap-3 py-2">
+              <Link href={`/app/journal?leaderId=${g.leaderId}&view=branch`} className="hover:text-brand-deep hover:underline">
+                {g.leaderName}’s branch
+              </Link>
+              <span className="tabular text-muted">
+                {g.received} of {g.expected}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 
   const runningChains = (chains ?? []).filter((chain) => chain.status === 'active');
   const prayerSection = chains && (
@@ -114,6 +169,48 @@ export default async function DashboardPage() {
     </section>
   );
 
+  // FR-DEV-09: the next few gatherings with their replies (5 ✓ · 1 ◷ · 0 ✗).
+  const devotionalSection = devotional && (
+    <section aria-labelledby="devotional-soon" className="space-y-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="devotional-soon" className="text-lg">
+          Devotional
+        </h2>
+        <Link href="/app/devotional" className="text-sm font-medium text-brand-deep hover:underline">
+          Open
+        </Link>
+      </div>
+      {devotional.upcoming.length === 0 ? (
+        <p className="text-muted">No gatherings in the next three days.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {devotional.upcoming.map((gathering) => (
+            <li key={gathering.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+              <div>
+                <Link href={`/app/devotional/${gathering.id}`} className="font-medium hover:text-brand-deep hover:underline">
+                  {gathering.name}
+                </Link>
+                <p className="text-sm text-muted">
+                  {gathering.dateLabel} · {gathering.timeLabel}
+                  {gathering.teamName ? ` · ${gathering.teamName}` : ''}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <ReplyCounts confirmed={gathering.confirmed} pending={gathering.pending} declined={gathering.declined} />
+                {gathering.openRequired > 0 && <Badge tone="amber">{gathering.openRequired === 1 ? '1 role open' : `${gathering.openRequired} roles open`}</Badge>}
+                {!gathering.published && <Badge>Draft</Badge>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+
+  // The first ministry card this person has takes the wide spot next to "Needs your attention"; the rest follow below.
+  const secondaryPrayer = journalSection ? prayerSection : null;
+  const secondaryDevotional = journalSection || prayerSection ? devotionalSection : null;
+
   return (
     <div className="space-y-8">
       <header className="space-y-1">
@@ -134,60 +231,16 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        {journal && s ? (
-          <section aria-labelledby="journal-today" className="space-y-4 rounded-[var(--radius-card)] border border-line bg-surface p-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 id="journal-today" className="text-lg">
-                Daily Journal today
-              </h2>
-              <Link href="/app/journal" className="text-sm font-medium text-brand-deep hover:underline">
-                Open
-              </Link>
-            </div>
-            <p className="text-muted">
-              {journal.leader?.isSelf ? 'Your group' : 'The people you care for'}:{' '}
-              <strong className="tabular text-ink">
-                {s.received.toLocaleString('en-PH')} of {s.expected.toLocaleString('en-PH')}
-              </strong>{' '}
-              received
-              {s.late > 0 ? ` · ${s.late} late` : ''}
-              {s.notYet > 0 ? ` · ${s.notYet} not yet` : ''}
-            </p>
-            <div
-              role="progressbar"
-              aria-label="Journals received today"
-              aria-valuemin={0}
-              aria-valuemax={s.expected}
-              aria-valuenow={s.received}
-              className="h-2.5 overflow-hidden rounded-full bg-ink/5"
-            >
-              <div className="h-full rounded-full bg-status-received" style={{ width: `${percent}%` }} />
-            </div>
-            {journal.groups.length > 0 && (
-              <ul className="divide-y divide-line text-sm">
-                {journal.groups.slice(0, 6).map((g) => (
-                  <li key={g.leaderId} className="flex items-center justify-between gap-3 py-2">
-                    <Link href={`/app/journal?leaderId=${g.leaderId}&view=branch`} className="hover:text-brand-deep hover:underline">
-                      {g.leaderName}’s branch
-                    </Link>
-                    <span className="tabular text-muted">
-                      {g.received} of {g.expected}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ) : (
-          (prayerSection ?? (
+        {journalSection ||
+          prayerSection ||
+          devotionalSection || (
             <section className="rounded-[var(--radius-card)] border border-dashed border-line-strong p-6 text-center">
               <p className="font-display text-lg font-bold">Ministry Today</p>
               <p className="mx-auto mt-1 max-w-md text-sm text-muted">
                 Daily Journal, Prayer Chain and Morning Devotional appear here for leaders and pastors.
               </p>
             </section>
-          ))
-        )}
+          )}
 
         {showAttention && (
           <section aria-labelledby="attention" className="rounded-[var(--radius-card)] border border-line bg-surface p-6">
@@ -199,7 +252,7 @@ export default async function DashboardPage() {
             ) : (
               <ul className="mt-3 divide-y divide-line">
                 {attention.map((item) => (
-                  <li key={item.href}>
+                  <li key={`${item.href} ${item.label}`}>
                     <Link href={item.href} className="flex items-center justify-between gap-3 py-2.5 hover:text-brand-deep">
                       <span>{item.label}</span>
                       <ChevronRight aria-hidden className="size-4 text-muted" />
@@ -212,7 +265,12 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {journal && s && prayerSection && <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">{prayerSection}</div>}
+      {(secondaryPrayer || secondaryDevotional) && (
+        <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+          {secondaryPrayer}
+          {secondaryDevotional}
+        </div>
+      )}
 
       {canManageUsers && (
         <section aria-labelledby="setup" className="rounded-[var(--radius-card)] border border-line bg-surface p-6">

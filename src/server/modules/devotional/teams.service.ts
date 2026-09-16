@@ -139,6 +139,31 @@ export async function listWorshipTeams(db: Database, ctx: RequestContext) {
   }));
 }
 
+export const TeamPeopleSearchInput = z.object({ teamId: z.uuid(), q: z.string().trim().max(80).default('') });
+
+/** People to add to a worship team: names and person codes only, never contact details (docs/06 note j). */
+export async function searchPeopleForTeam(db: Database, ctx: RequestContext, raw: unknown) {
+  const input = parseInput(TeamPeopleSearchInput, raw);
+  const team = await teamForActor(db, ctx, input.teamId);
+  if (input.q.length < 2) return [];
+  const escaped = input.q.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`);
+  const rows = await queryRows<{ id: string; first_name: string; last_name: string; preferred_name: string | null; person_code: string }>(
+    db,
+    sql`SELECT p.id, p.first_name, p.last_name, p.preferred_name, p.person_code
+          FROM people p
+         WHERE p.archived_at IS NULL AND p.registration_status = 'confirmed'
+           AND (p.search_name % lower(immutable_unaccent(${input.q})) OR p.search_name LIKE lower(immutable_unaccent(${`%${escaped}%`})))
+           AND NOT EXISTS (SELECT 1 FROM team_memberships tm WHERE tm.team_id = ${team.id}::uuid AND tm.person_id = p.id AND tm.left_on IS NULL)
+         ORDER BY p.last_name, p.first_name
+         LIMIT 20`,
+  );
+  return rows.map((r) => ({
+    personId: r.id,
+    name: displayName({ firstName: r.first_name, lastName: r.last_name, preferredName: r.preferred_name }),
+    personCode: r.person_code,
+  }));
+}
+
 /** Ministries the actor may add worship teams to. */
 export async function worshipTeamOptions(db: Executor, ctx: RequestContext) {
   const grants = grantsFor(ctx, 'devotional.teams.manage');

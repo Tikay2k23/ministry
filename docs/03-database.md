@@ -1104,6 +1104,17 @@ CREATE INDEX gathering_assignments_person  ON gathering_assignments (person_id, 
 CREATE INDEX gathering_assignments_pending ON gathering_assignments (gathering_id) WHERE status = 'pending';
 ```
 
+**Implementation notes (M4, 2026-09-17).** These come from migration `0008_devotional`. None of them changes a concept:
+- **`person_unavailability` (§4.10)** stores `starts_at` and `ends_at` (`CHECK (ends_at > starts_at)`) instead of a `tstzrange`, because Drizzle has no range type. The GiST index is on `(person_id, tstzrange(starts_at, ends_at))`, so overlap queries are unchanged.
+- **Added columns:** `serving_roles.created_at` / `updated_at`, `gathering_types.updated_at`, and `created_by` on `gathering_schedules` and `gatherings`.
+- **Time zone:** gathering times use the ministry profile's time zone (`ministry.profile`). Gathering types have none of their own.
+- **Access:**
+  - `user_role_assignments` gains `scope_gathering_type_id` and the `gathering_type` scope type.
+  - `action_tokens.purpose` allows `gathering_assignment`, with the assignment as `subject_id`.
+- **Ending a schedule** sets `is_active = false` and cancels its upcoming gatherings. `effective_to` stays as it was.
+- **Row-level security** is enabled on the nine new tables, with the same `gentouch_app_full_access` policy as every other table.
+- **Reference data:** 12 serving roles and a Morning Devotional (6:00 AM, 60 minutes) whose roster template needs every role once, Backup Vocal twice, and Bass and Drums optionally.
+
 ### 4.13 Notifications
 ```sql
 CREATE TABLE notification_templates (

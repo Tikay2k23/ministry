@@ -91,6 +91,14 @@ Scope: **G** global · **B** own branch (self + downline) · **D** own direct gr
 - **h** — Coordinators see reports for their chains, excluding confidential fields and anonymous identities.
 - **i** — Super Admins may assign any role. Assignments that include pastoral permissions notify all Pastors immediately and appear in the quarterly access review.
 - **j** — *Leader directory (implemented in M1).* Anyone with `people.view` can find, **by name only**, leaders who receive new people (`accepts_members`). This is the same information the public leader selector will show (FR-JRN-05), and it lets a leader request a transfer to a leader outside their own scope. No contact details, group members or journal data are exposed.
+- **k** — *Devotional scope (implemented in M4).*
+  - **Seeing:** a `devotional.view` grant in any scope shows every gathering and roster (row 29 "V"), because rosters are shared openly in the ministry.
+  - **Managing:** `devotional.manage` needs a global grant, a grant for the gathering type's ministry, or a grant for the gathering type itself (the new `gathering_type` scope). Other gatherings return `NOT_FOUND`.
+  - **Teams:** `devotional.teams.manage` covers the teams in the grant's ministry or team. For a Worship Coordinator it covers the teams their gathering types rotate, and the teams in those gathering types' ministries. Serving roles are one shared vocabulary, so anyone with `devotional.teams.manage` may add or rename them.
+  - **Worship Coordinator bundle:** `people.view`, `people.contact.view`, `devotional.view`, `devotional.manage`, `devotional.teams.manage`, `care.view`, `care.manage`, `reports.view` and `reports.export`, scoped to one gathering type. For people, follow-ups and reports, that scope means anyone on the gathering type's rosters and the active members of the teams its schedules rotate.
+  - **Ministry Heads** now hold `devotional.teams.manage` (row 30). `devotional.manage` stays "when granted" for them (note f).
+  - **Appointing:** Worship Coordinators are appointed on the gathering's setup page by someone with global `iam.users.manage`.
+  - **Adding people** to rosters and teams searches confirmed people by name and person code only, as in note j.
 
 ### Participant (no login) capabilities
 | Capability | Allowed |

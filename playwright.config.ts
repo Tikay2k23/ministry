@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 import { E2E_BASE_URL } from './tests/e2e/support/e2e-env';
 
 /**
- * End-to-end regression tests for the M1–M2 workflows (tests/e2e), run with `npm run test:e2e`.
+ * End-to-end regression tests for the M1–M4 workflows (tests/e2e), run with `npm run test:e2e`.
  * The web server is a separate `next dev` on port 3100 with a fresh database (tests/e2e/server.ts).
  * Portal pages are tested on a desktop browser, the public pages on a phone.
  */

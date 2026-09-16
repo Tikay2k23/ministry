@@ -213,6 +213,38 @@ Every mutation writes an `audit_logs` row in the same transaction. Operations ma
 | `devotional.unavailability.set` | `devotional.manage` or self (V1 via link) | `{ personId, from, to, reason? }` | — | `VALIDATION_ERROR` |
 | `devotional.shareLink` | `devotional.manage` | `{ assignmentId }` | `{ url }` | — |
 
+**Implementation note (M4, 2026-09-17).** How the devotional operations were built, and where they differ from the table above:
+- **Portal:** pages call the services in `src/server/modules/devotional/` through server actions (`src/app/app/devotional/actions.ts`). The services check the permission and the gathering type's scope on every call.
+
+| Page | Operations |
+|---|---|
+| `/app/devotional` | `devotional.calendar` for one week, Monday to Sunday (`?week=&type=&attention=1`), rather than a `from`/`to` range. "Publish this week" publishes the drafts the viewer may publish |
+| `/app/devotional/{gatheringId}` | `devotional.gathering.get`, with assign, find a substitute, remove, share their link, publish, "Fill again from the team" (`rebuildRoster`), cancel, and title and notes |
+| `/app/devotional/teams` | `devotional.teams.*`: worship teams, their members, the roles each member plays (one main role) and away dates |
+| `/app/devotional/setup` | Kinds of gatherings (`gatheringTypes.create`) and `servingRoles.*` |
+| `/app/devotional/setup/{typeId}` | `devotional.schedules.*`, the roster template, one-off gatherings, the gathering's details and its Worship Coordinators |
+
+- **Typeahead:** `GET /api/devotional/people?gatheringId=&servingRoleId=&q=` puts people who play the role, and the gathering's team, first. `?teamId=&q=` finds people to add to a team. Both return names and person codes only.
+- **Public:** `POST /api/public/serving/respond` with `{ token, response: 'accept' | 'decline', note? }` returns `{ view }`. `/a/{token}` serves prayer and serving links alike, by the token's purpose.
+  - Errors: `GONE` (reason `CANCELLED` or `REASSIGNED`) and `INVALID_STATE` (`STARTED`, or `LOCKED`).
+  - `LOCKED`: someone who has already replied can't change their reply within `response_lock_hours` of the start. A first reply is accepted until the gathering starts.
+  - A decline opens a care follow-up and sends the coordinators an in-app notice.
+- **`devotional.gathering.publishRoster`** takes `{ gatheringIds[], force }`.
+  - Rosters with required roles still open don't cause a `VALIDATION_ERROR`. They come back in `needsForce` with their open roles, and the page asks whether to publish anyway.
+  - Only people who haven't been told yet get an email, with their personal link.
+- **`devotional.gathering.update`** edits the title and notes. Moving a gathering or changing its team isn't built: cancel it and create a one-off instead. A one-off gathering is filled from the team chosen for it.
+- **`devotional.schedules.upsert`** is *add* and *end*, as for prayer:
+  - Gatherings are created when the schedule is added, then hourly by the `devotional.generate_gatherings` job.
+  - Ending a schedule cancels its upcoming gatherings and tells the people who had confirmed.
+  - The browser previews the next 6 occurrences and their teams with the functions the generator uses.
+  - Schedules repeat daily, on chosen weekdays, or monthly (a day of the month, or the first to fourth or last weekday). Monthly schedules rotate per occurrence, not per week.
+- **`devotional.assign`** warnings are `UNAVAILABLE`, `OVERLAP` and `NOT_TEAM_MEMBER`. None of them blocks the assignment.
+- **`devotional.shareLink`** doesn't revoke earlier links. A link stops working when the gathering ends, and all of an assignment's links are revoked when the person is replaced or removed or the gathering is cancelled.
+- **`devotional.unavailability.set`** is add and remove, by anyone with `devotional.manage` or `devotional.teams.manage`, for people within their `people.view` scope. It lists the gatherings the person is already rostered for on those days. Self-service is still V1.
+- **Worship Coordinators** are appointed on the gathering's setup page by someone with global `iam.users.manage`, not on the Users page, because the role's scope is the gathering type.
+- **Dashboard (FR-DEV-09):** a Devotional card with the next three days' gatherings and their replies (5 ✓ · 1 ◷ · 0 ✗). "Needs your attention" adds required roles still open within two days, and people who can't serve.
+- **Not built yet:** reordering serving roles, a devotional report, and the notification template editor and delivery log.
+
 ### 3.8 Ministries
 | Operation | Authorisation | Input | Output |
 |---|---|---|---|

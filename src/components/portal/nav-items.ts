@@ -11,6 +11,7 @@ export interface NavItem {
     | 'dashboard'
     | 'journal'
     | 'prayer'
+    | 'devotional'
     | 'followups'
     | 'people'
     | 'leadership'
@@ -34,6 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/app', label: 'Dashboard', icon: 'dashboard', section: 'main' },
   { href: '/app/journal', label: 'Daily Journal', icon: 'journal', section: 'main', permission: 'journal.status.view' },
   { href: '/app/prayer', label: 'Prayer Chain', icon: 'prayer', section: 'main', permission: 'prayer.view', chainScope: true },
+  { href: '/app/devotional', label: 'Devotional', icon: 'devotional', section: 'main', permission: 'devotional.view' },
   { href: '/app/follow-ups', label: 'Follow-ups', icon: 'followups', section: 'main', permission: 'care.view' },
   { href: '/app/people', label: 'People', icon: 'people', section: 'main', permission: 'people.view' },
   { href: '/app/leadership', label: 'Leadership', icon: 'leadership', section: 'main', permission: 'hierarchy.view' },

@@ -345,6 +345,11 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
   - `prayer.generate_slots` hourly.
   - `prayer.check_overdue` every 5 minutes: once the grace time has passed, a slot nobody marked finished becomes `needs_follow_up`, a care follow-up opens, and the chain's coordinators get an in-app notice.
   - `prayer.slot_reminders` every 5 minutes: a reminder 24 hours before a slot (for assignments made at least 20 hours ahead) and 30 minutes before (made at least 40 minutes ahead), each sent at most once per assignment.
+  - `devotional.generate_gatherings` hourly (M4): each active schedule's missing gatherings in its window, with their rosters filled. A gathering that already exists is never changed.
+  - `devotional.confirmation_reminders` every 15 minutes (M4), for people on published rosters who haven't replied:
+    - A reminder 72 hours before, if they were told at least 84 hours before.
+    - Another 24 hours before, if they were told at least 30 hours before.
+    - Coordinators get an in-app notice about required roles still open within 24 hours.
   - `tokens.cleanup` daily.
   - `notifications.deliver` every minute.
   - Journal reminders and leader digests come later.
