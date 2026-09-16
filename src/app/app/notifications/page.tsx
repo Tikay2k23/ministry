@@ -44,7 +44,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     <div className="space-y-6">
       <PageHeader
         title="Notifications"
-        description="Updates about the people and prayer chains you look after."
+        description="Updates about the people, prayer chains and gatherings you look after."
         actions={inbox.unread > 0 && <MarkAllReadButton />}
       />
 
@@ -68,7 +68,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         <EmptyState
           icon={Bell}
           title={show === 'unread' ? 'You’re all caught up' : 'No notifications yet'}
-          description={show === 'unread' ? 'Nothing new is waiting for you.' : 'Prayer slots that need follow-up and other updates will appear here.'}
+          description={show === 'unread' ? 'Nothing new is waiting for you.' : 'Prayer slots that need follow-up, people who can’t serve, and other updates will appear here.'}
         />
       ) : (
         <ul className="divide-y divide-line overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">

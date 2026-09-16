@@ -68,7 +68,8 @@ export default async function DashboardPage() {
 
   const checklist = [
     { label: 'Turn on two-step verification', done: user.twoFactorEnabled, href: '/app/account/security' },
-    { label: 'Import your people and leadership structure', done: false, href: '/app/people/import' },
+    // Importing is a sensitive permission: until it's usable (two-step verification), the page would be a 404.
+    { label: 'Import your people and leadership structure', done: false, href: hasPermission(ctx, 'import.manage') ? '/app/people/import' : undefined },
     { label: 'Invite your pastors and ministry office', done: false, href: '/app/admin/users' },
     { label: 'Print journal QR codes for your leaders', done: false, note: 'Open a leader’s profile and choose “journal QR code”.' },
   ];

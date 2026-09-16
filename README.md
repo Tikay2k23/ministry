@@ -37,6 +37,10 @@ management and settings stay locked until you do.
 > **PGlite note:** an embedded database directory can be opened by only one process at a time.
 > Stop `npm run dev` before running `npm run db:migrate` or `npm run db:seed`.
 
+> **After pulling new code:** if `npm run dev` prints `The database is missing a migration`, pages
+> will fail with "Failed query" errors until you stop the server, run `npm run db:setup` and start
+> it again. The setup is additive: it never removes your data.
+
 ## Scripts
 
 | Command | What it does |

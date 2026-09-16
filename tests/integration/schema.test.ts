@@ -1,7 +1,8 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newPersonCode } from '@/lib/ids';
-import { queryRows, type DatabaseHandle } from '@/server/db/client';
+import { openDatabase, queryRows, type DatabaseHandle } from '@/server/db/client';
+import { pendingMigrations } from '@/server/db/migrate';
 import { people, roles, userRoleAssignments, users } from '@/server/db/schema';
 import { createTestDatabase } from '../helpers/db';
 
@@ -23,6 +24,19 @@ const basePerson = () => ({
 });
 
 describe('database foundation', () => {
+  it('knows which migrations a database is missing (the development startup warning)', async () => {
+    expect(await pendingMigrations(handle.db)).toEqual([]);
+
+    const empty = openDatabase('pglite://memory');
+    try {
+      const pending = await pendingMigrations(empty.db);
+      expect(pending[0]).toBe('0000_extensions');
+      expect(pending).toContain('0008_devotional');
+    } finally {
+      await empty.close();
+    }
+  });
+
   it('installs the required PostgreSQL extensions', async () => {
     const rows = await queryRows<{ extname: string }>(handle.db, sql`SELECT extname FROM pg_extension`);
     expect(rows.map((r) => r.extname)).toEqual(
