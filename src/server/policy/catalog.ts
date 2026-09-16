@@ -3,9 +3,7 @@
  * docs/06-permission-matrix.md. Seeds the `permissions`, `roles` and `role_permissions`
  * tables and drives the permission test suite.
  *
- * Scope types available now: global, branch, ministry, team and prayer_chain (M3).
- * The Worship Coordinator role arrives with the Devotional module (M4), together with the
- * gathering_type scope type.
+ * Scope types: global, branch, ministry, team, prayer_chain (M3) and gathering_type (M4).
  */
 import type { ScopeType } from '../db/enums';
 
@@ -27,11 +25,15 @@ const GMT = ['global', 'ministry', 'team'] as const;
 /** Chain-scoped grants: coordinators act on their chains and see those chains' participants. */
 const GBMTC = ['global', 'branch', 'ministry', 'team', 'prayer_chain'] as const;
 const GMC = ['global', 'ministry', 'prayer_chain'] as const;
+/** People, follow-ups and reports also reach the people serving in a coordinator's gathering types. */
+const GBMTCY = ['global', 'branch', 'ministry', 'team', 'prayer_chain', 'gathering_type'] as const;
+/** Devotional grants: global, a ministry (its gathering types and teams), a team, or one gathering type. */
+const GMTY = ['global', 'ministry', 'team', 'gathering_type'] as const;
 
 export const PERMISSIONS = {
   // People
-  'people.view': { module: 'people', description: 'View people profiles (basic fields)', scopes: GBMTC },
-  'people.contact.view': { module: 'people', description: 'View phone, email, address and birthday', scopes: GBMTC },
+  'people.view': { module: 'people', description: 'View people profiles (basic fields)', scopes: GBMTCY },
+  'people.contact.view': { module: 'people', description: 'View phone, email, address and birthday', scopes: GBMTCY },
   'people.create': { module: 'people', description: 'Add people', scopes: GB },
   'people.edit': { module: 'people', description: 'Edit profile fields', scopes: GB },
   'people.contact.edit': { module: 'people', description: 'Edit contact details', scopes: GB },
@@ -66,8 +68,8 @@ export const PERMISSIONS = {
   'forms.publish': { module: 'journal', description: 'Publish journal questions', scopes: G },
 
   // Care & notes
-  'care.view': { module: 'care', description: 'View follow-ups', scopes: GBMTC },
-  'care.manage': { module: 'care', description: 'Create and resolve follow-ups', scopes: GBMTC },
+  'care.view': { module: 'care', description: 'View follow-ups', scopes: GBMTCY },
+  'care.manage': { module: 'care', description: 'Create and resolve follow-ups', scopes: GBMTCY },
   'care.pastoral.view': { module: 'care', description: 'View pastoral follow-ups', sensitive: true, pastoral: true, scopes: G },
   'notes.leadership.view': { module: 'care', description: 'View leadership notes', scopes: GB },
   'notes.leadership.create': { module: 'care', description: 'Write leadership notes', scopes: GB },
@@ -83,13 +85,13 @@ export const PERMISSIONS = {
   'prayer.requests.confidential.view': { module: 'prayer', description: 'Read confidential prayer requests', sensitive: true, pastoral: true, scopes: G },
 
   // Devotional (enforced from M4)
-  'devotional.view': { module: 'devotional', description: 'View devotional schedules and rosters', scopes: GMT },
-  'devotional.manage': { module: 'devotional', description: 'Manage schedules and rosters', scopes: GMT },
-  'devotional.teams.manage': { module: 'devotional', description: 'Manage worship teams and serving roles', scopes: GMT },
+  'devotional.view': { module: 'devotional', description: 'View devotional schedules and rosters', scopes: GMTY },
+  'devotional.manage': { module: 'devotional', description: 'Manage schedules and rosters', scopes: GMTY },
+  'devotional.teams.manage': { module: 'devotional', description: 'Manage worship teams and serving roles', scopes: GMTY },
 
   // Reports
-  'reports.view': { module: 'reports', description: 'Run reports within scope', scopes: GBMTC },
-  'reports.export': { module: 'reports', description: 'Export reports (CSV)', sensitive: true, scopes: GBMTC },
+  'reports.view': { module: 'reports', description: 'Run reports within scope', scopes: GBMTCY },
+  'reports.export': { module: 'reports', description: 'Export reports (CSV)', sensitive: true, scopes: GBMTCY },
 
   // Public links / QR
   'links.manage': { module: 'links', description: 'Manage all QR entry codes', scopes: G },
@@ -238,7 +240,7 @@ export const ROLES = {
     defaultScopeType: 'ministry',
     permissions: [
       'people.view', 'people.contact.view', 'people.export', 'ministries.view',
-      'ministry.structure.manage', 'ministry.members.manage', 'devotional.view',
+      'ministry.structure.manage', 'ministry.members.manage', 'devotional.view', 'devotional.teams.manage',
       'reports.view', 'reports.export',
     ],
   },
@@ -249,6 +251,15 @@ export const ROLES = {
     permissions: [
       'people.view', 'people.contact.view', 'prayer.view', 'prayer.manage', 'prayer.assign', 'prayer.resolve',
       'prayer.reports.view', 'care.view', 'care.manage', 'reports.view', 'reports.export',
+    ],
+  },
+  worship_coordinator: {
+    name: 'Worship Coordinator',
+    description: 'Runs devotional gatherings: schedules, rosters, worship teams and substitutes.',
+    defaultScopeType: 'gathering_type',
+    permissions: [
+      'people.view', 'people.contact.view', 'devotional.view', 'devotional.manage', 'devotional.teams.manage',
+      'care.view', 'care.manage', 'reports.view', 'reports.export',
     ],
   },
   viewer: {

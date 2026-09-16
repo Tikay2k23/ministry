@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { citext, createdAt, oneOf, pk, textPk, tstz, updatedAt } from '../columns';
 import { SCOPE_TYPES, USER_STATUSES } from '../enums';
+import { gatheringTypes } from './devotional';
 import { ministries, teams } from './ministries';
 import { people } from './people';
 import { prayerChains } from './prayer';
@@ -187,10 +188,7 @@ export const rolePermissions = pgTable(
   ],
 );
 
-/**
- * One nullable FK column per scope type (docs/03 §4.5) so every scope reference is a real FK.
- * The gathering-type scope column (M4) is added with the Devotional module.
- */
+/** One nullable FK column per scope type (docs/03 §4.5) so every scope reference is a real FK. */
 export const userRoleAssignments = pgTable(
   'user_role_assignments',
   {
@@ -210,6 +208,7 @@ export const userRoleAssignments = pgTable(
     scopeMinistryId: uuid('scope_ministry_id').references((): AnyPgColumn => ministries.id),
     scopeTeamId: uuid('scope_team_id').references((): AnyPgColumn => teams.id),
     scopePrayerChainId: uuid('scope_prayer_chain_id').references((): AnyPgColumn => prayerChains.id),
+    scopeGatheringTypeId: uuid('scope_gathering_type_id').references((): AnyPgColumn => gatheringTypes.id),
     /** NULL = unlimited; 1 = direct group only. */
     branchMaxDepth: smallint('branch_max_depth'),
     grantedBy: uuid('granted_by').references((): AnyPgColumn => users.id),
@@ -223,12 +222,13 @@ export const userRoleAssignments = pgTable(
     check('role_assignment_scope_type_check', oneOf('scope_type', SCOPE_TYPES)),
     check(
       'role_assignment_scope_arity',
-      sql`num_nonnulls(scope_person_id, scope_ministry_id, scope_team_id, scope_prayer_chain_id) = CASE WHEN scope_type = 'global' THEN 0 ELSE 1 END`,
+      sql`num_nonnulls(scope_person_id, scope_ministry_id, scope_team_id, scope_prayer_chain_id, scope_gathering_type_id) = CASE WHEN scope_type = 'global' THEN 0 ELSE 1 END`,
     ),
     check('role_assignment_branch_scope', sql`scope_type <> 'branch' OR scope_person_id IS NOT NULL`),
     check('role_assignment_ministry_scope', sql`scope_type <> 'ministry' OR scope_ministry_id IS NOT NULL`),
     check('role_assignment_team_scope', sql`scope_type <> 'team' OR scope_team_id IS NOT NULL`),
     check('role_assignment_prayer_chain_scope', sql`scope_type <> 'prayer_chain' OR scope_prayer_chain_id IS NOT NULL`),
+    check('role_assignment_gathering_type_scope', sql`scope_type <> 'gathering_type' OR scope_gathering_type_id IS NOT NULL`),
     check(
       'role_assignment_branch_depth',
       sql`branch_max_depth IS NULL OR (branch_max_depth > 0 AND scope_type = 'branch')`,
@@ -240,7 +240,7 @@ export const userRoleAssignments = pgTable(
         t.userId,
         t.roleId,
         t.scopeType,
-        sql`coalesce(scope_person_id, scope_ministry_id, scope_team_id, scope_prayer_chain_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
+        sql`coalesce(scope_person_id, scope_ministry_id, scope_team_id, scope_prayer_chain_id, scope_gathering_type_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
       )
       .where(sql`revoked_at IS NULL`),
     index('role_assignment_by_user').on(t.userId).where(sql`revoked_at IS NULL`),

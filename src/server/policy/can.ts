@@ -61,6 +61,15 @@ function scopeCondition(scope: Scope, personId: SQL | AnyPgColumn): SQL {
           WHERE ps.prayer_chain_id = ${scope.chainId} AND pa.person_id = ${ref})
         OR EXISTS (SELECT 1 FROM prayer_commitments pc
           WHERE pc.prayer_chain_id = ${scope.chainId} AND pc.person_id = ${ref} AND pc.ended_at IS NULL))`;
+    case 'gathering_type':
+      // People-based permissions over a gathering type reach the people who serve in it: anyone on
+      // one of its rosters, or an active member of a team in one of its schedules' rotations.
+      return sql`(EXISTS (SELECT 1 FROM gathering_assignments ga JOIN gatherings g ON g.id = ga.gathering_id
+          WHERE g.gathering_type_id = ${scope.gatheringTypeId} AND ga.person_id = ${ref})
+        OR EXISTS (SELECT 1 FROM team_memberships tm
+          JOIN gathering_schedule_teams gst ON gst.team_id = tm.team_id
+          JOIN gathering_schedules gs ON gs.id = gst.schedule_id
+          WHERE gs.gathering_type_id = ${scope.gatheringTypeId} AND tm.person_id = ${ref} AND tm.left_on IS NULL))`;
   }
 }
 
@@ -173,6 +182,54 @@ export function chainScopeFilter(
   }
   if (chainIds.length > 0) {
     parts.push(sql`${columnRef(chainId)} IN (${sql.join(chainIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+  }
+  return parts.length > 0 ? sql`(${sql.join(parts, sql` OR `)})` : sql`FALSE`;
+}
+
+// ─── Devotional gathering types ───────────────────────────────────────────────
+
+export interface GatheringTypeRef {
+  id: string;
+  ministryId: string | null;
+}
+
+/**
+ * Gathering-type access (no database): a global grant, a grant for the type's ministry, or a grant
+ * for the type itself. Viewing gatherings and rosters needs only `devotional.view` in any scope
+ * (docs/06 row 29); this is for managing them.
+ */
+export function canAccessGatheringType(ctx: RequestContext, permission: PermissionKey, type: GatheringTypeRef): boolean {
+  return grantsFor(ctx, permission).some(
+    (g) =>
+      g.scope.type === 'global' ||
+      (g.scope.type === 'ministry' && type.ministryId !== null && g.scope.ministryId === type.ministryId) ||
+      (g.scope.type === 'gathering_type' && g.scope.gatheringTypeId === type.id),
+  );
+}
+
+/** Throws NOT_FOUND so gathering types outside the actor's scope look like missing ones. */
+export function assertGatheringTypeAccess(ctx: RequestContext, permission: PermissionKey, type: GatheringTypeRef): void {
+  if (ctx.actor.kind !== 'user') throw new AppError('UNAUTHENTICATED', 'Please sign in.');
+  if (!canAccessGatheringType(ctx, permission, type)) throw notFound('gathering type');
+}
+
+/** SQL predicate restricting gathering types to the ones the actor may act on with `permission`. */
+export function gatheringTypeScopeFilter(
+  ctx: RequestContext,
+  permission: PermissionKey,
+  typeId: SQL | AnyPgColumn,
+  ministryId: SQL | AnyPgColumn,
+): SQL {
+  const grants = grantsFor(ctx, permission);
+  if (grants.some((g) => g.scope.type === 'global')) return sql`TRUE`;
+  const ministryIds = grants.flatMap((g) => (g.scope.type === 'ministry' ? [g.scope.ministryId] : []));
+  const typeIds = grants.flatMap((g) => (g.scope.type === 'gathering_type' ? [g.scope.gatheringTypeId] : []));
+  const parts: SQL[] = [];
+  if (ministryIds.length > 0) {
+    parts.push(sql`${columnRef(ministryId)} IN (${sql.join(ministryIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
+  }
+  if (typeIds.length > 0) {
+    parts.push(sql`${columnRef(typeId)} IN (${sql.join(typeIds.map((id) => sql`${id}::uuid`), sql`, `)})`);
   }
   return parts.length > 0 ? sql`(${sql.join(parts, sql` OR `)})` : sql`FALSE`;
 }

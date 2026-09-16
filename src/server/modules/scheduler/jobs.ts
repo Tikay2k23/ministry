@@ -1,3 +1,5 @@
+import { sendServingReminders } from '../devotional/devotional-jobs.service';
+import { generateUpcomingGatherings } from '../devotional/generation.service';
 import { ensureJournalLedger } from '../journal/ledger.service';
 import { deliverDueNotifications } from '../notifications/delivery.service';
 import { generateUpcomingSlots } from '../prayer/generation.service';
@@ -25,6 +27,8 @@ export const JOBS: readonly JobDefinition[] = [
   { key: 'prayer.generate_slots', everyMinutes: 60, run: generateUpcomingSlots },
   { key: 'prayer.check_overdue', everyMinutes: 5, run: flagOverdueAssignments },
   { key: 'prayer.slot_reminders', everyMinutes: 5, run: sendSlotReminders },
+  { key: 'devotional.generate_gatherings', everyMinutes: 60, run: generateUpcomingGatherings },
+  { key: 'devotional.confirmation_reminders', everyMinutes: 15, run: sendServingReminders },
   { key: 'tokens.cleanup', everyMinutes: 24 * 60, run: cleanupExpiredRecords },
   { key: 'notifications.deliver', everyMinutes: 1, run: deliverDueNotifications },
 ];

@@ -5,6 +5,7 @@ import { getEmailProvider } from '../../email/email';
 import { notificationEmail } from '../../email/templates';
 import { getEnv } from '../../env';
 import { errorSummary, logger } from '../../logger';
+import { issueServingActionLink } from '../devotional/action-links.service';
 import { issuePrayerActionLink } from '../prayer/action-links.service';
 import { templateFor } from './templates';
 
@@ -70,9 +71,13 @@ async function deliverOne(db: Database, row: ClaimedRow, now: Date): Promise<Out
 
   let url: string | null = null;
   const content = template.render(row.payload);
-  if (template.needsActionLink) {
+  if (template.actionLink) {
     const assignmentId = typeof row.payload.assignmentId === 'string' ? row.payload.assignmentId : null;
-    const link = assignmentId ? await issuePrayerActionLink(db, assignmentId, now) : null;
+    const link = !assignmentId
+      ? null
+      : template.actionLink === 'gathering_assignment'
+        ? await issueServingActionLink(db, assignmentId, now)
+        : await issuePrayerActionLink(db, assignmentId, now);
     if (!link) {
       await finish({ status: 'suppressed', suppressedReason: 'no_longer_relevant' });
       return 'suppressed';

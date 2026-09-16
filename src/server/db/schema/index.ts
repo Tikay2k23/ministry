@@ -12,3 +12,5 @@ export * from './care';
 export * from './prayer';
 export * from './notifications';
 export * from './scheduler';
+export * from './devotional';
+export * from './scheduling';

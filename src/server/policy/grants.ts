@@ -10,7 +10,9 @@ export type Scope =
   | { type: 'ministry'; ministryId: string }
   | { type: 'team'; teamId: string }
   /** A prayer chain and, for people-based permissions, that chain's participants. */
-  | { type: 'prayer_chain'; chainId: string };
+  | { type: 'prayer_chain'; chainId: string }
+  /** A devotional gathering type and, for people-based permissions, the people who serve in it. */
+  | { type: 'gathering_type'; gatheringTypeId: string };
 
 export interface Grant {
   permission: PermissionKey;
@@ -44,6 +46,7 @@ export async function loadGrants(
       scopeMinistryId: userRoleAssignments.scopeMinistryId,
       scopeTeamId: userRoleAssignments.scopeTeamId,
       scopePrayerChainId: userRoleAssignments.scopePrayerChainId,
+      scopeGatheringTypeId: userRoleAssignments.scopeGatheringTypeId,
       branchMaxDepth: userRoleAssignments.branchMaxDepth,
     })
     .from(userRoleAssignments)
@@ -77,6 +80,8 @@ export async function loadGrants(
     else if (row.scopeType === 'team' && row.scopeTeamId) scope = { type: 'team', teamId: row.scopeTeamId };
     else if (row.scopeType === 'prayer_chain' && row.scopePrayerChainId)
       scope = { type: 'prayer_chain', chainId: row.scopePrayerChainId };
+    else if (row.scopeType === 'gathering_type' && row.scopeGatheringTypeId)
+      scope = { type: 'gathering_type', gatheringTypeId: row.scopeGatheringTypeId };
 
     if (scope) grants.push({ permission, scope, roleKey: row.roleKey });
   }

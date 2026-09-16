@@ -5,7 +5,7 @@ import { actorUserId, type RequestContext } from '../../context/request-context'
 import type { Database, Executor, Transaction } from '../../db/client';
 import type { ScopeType } from '../../db/enums';
 import { isUniqueViolation } from '../../db/errors';
-import { ministries, people, prayerChains, roles, teams, userRoleAssignments, users, authSessions } from '../../db/schema';
+import { gatheringTypes, ministries, people, prayerChains, roles, teams, userRoleAssignments, users, authSessions } from '../../db/schema';
 import { getEmailProvider } from '../../email/email';
 import { invitationEmail } from '../../email/templates';
 import { getEnv } from '../../env';
@@ -33,6 +33,7 @@ const RoleGrantFields = {
   scopeMinistryId: z.uuid().optional(),
   scopeTeamId: z.uuid().optional(),
   scopePrayerChainId: z.uuid().optional(),
+  scopeGatheringTypeId: z.uuid().optional(),
   /** Branch roles: override the default depth (null = whole downline). */
   branchMaxDepth: z.int().min(1).max(50).nullable().optional(),
   reason: z.string().trim().max(500).optional(),
@@ -107,6 +108,13 @@ async function grantRoleInTx(tx: Transaction, ctx: RequestContext, request: Gran
         .where(and(eq(prayerChains.id, request.scopePrayerChainId), isNull(prayerChains.archivedAt)));
       if (!c) throw validationError({ scopePrayerChainId: ['That prayer chain does not exist.'] });
       scope.scopePrayerChainId = request.scopePrayerChainId;
+      break;
+    }
+    case 'gathering_type': {
+      if (!request.scopeGatheringTypeId) throw validationError({ scopeGatheringTypeId: ['Choose the gathering type.'] });
+      const [type] = await tx.select({ id: gatheringTypes.id }).from(gatheringTypes).where(eq(gatheringTypes.id, request.scopeGatheringTypeId));
+      if (!type) throw validationError({ scopeGatheringTypeId: ['That gathering type does not exist.'] });
+      scope.scopeGatheringTypeId = request.scopeGatheringTypeId;
       break;
     }
     case 'global':
@@ -323,8 +331,9 @@ export async function grantableRolesForPerson(
   const canGrantAnything = hasPermission(ctx, 'iam.roles.manage');
 
   const roleOptions = (Object.entries(ROLES) as [RoleKey, RoleDefinition][])
-    // Chain coordinators are appointed from the prayer chain's setup page, where the chain is known.
-    .filter(([, def]) => def.defaultScopeType !== 'prayer_chain')
+    // Chain and worship coordinators are appointed from the prayer chain's or the gathering type's
+    // setup page, where the chain or type is known.
+    .filter(([, def]) => def.defaultScopeType !== 'prayer_chain' && def.defaultScopeType !== 'gathering_type')
     .filter(
       ([, def]) =>
         canGrantAnything || def.permissions.map(bundleEntryKey).every((p) => !isSensitive(p) || hasPermission(ctx, p)),

@@ -19,7 +19,7 @@ import { people } from './people';
 /**
  * Ministry (service) structure — deliberately independent from the leadership hierarchy
  * (docs/01 BR-H-07). docs/03-database.md §4.4
- * `team_member_serving_roles` is added with the Devotional module (M4).
+ * `team_member_serving_roles` lives in ./devotional.ts, next to the serving roles it references.
  */
 export const ministries = pgTable(
   'ministries',

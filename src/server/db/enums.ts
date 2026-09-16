@@ -20,8 +20,7 @@ export const MINISTRY_POSITIONS = ['member', 'worker', 'assistant_head', 'head']
 export const TEAM_MEMBER_ROLES = ['lead', 'assistant', 'member'] as const;
 
 export const USER_STATUSES = ['invited', 'active', 'suspended', 'deactivated'] as const;
-/** 'gathering_type' (M4) is added with the Devotional module. */
-export const SCOPE_TYPES = ['global', 'branch', 'ministry', 'team', 'prayer_chain'] as const;
+export const SCOPE_TYPES = ['global', 'branch', 'ministry', 'team', 'prayer_chain', 'gathering_type'] as const;
 
 export const AUDIT_CATEGORIES = ['change', 'access', 'auth', 'security', 'system'] as const;
 export const ACTOR_TYPES = ['user', 'participant', 'system'] as const;
@@ -86,8 +85,7 @@ export const CARE_VISIBILITIES = ['leadership', 'pastoral'] as const;
 export const ENTRY_CODE_KINDS = ['journal_general', 'journal_leader', 'prayer_chain'] as const;
 export const ENTRY_CODE_STATUSES = ['active', 'retired'] as const;
 export const PARTICIPANT_KEY_ORIGINS = ['registration', 'phone_match', 'personal_link', 'otp'] as const;
-/** The serving assignment purpose is added in M4. */
-export const ACTION_TOKEN_PURPOSES = ['personal_key_install', 'prayer_assignment'] as const;
+export const ACTION_TOKEN_PURPOSES = ['personal_key_install', 'prayer_assignment', 'gathering_assignment'] as const;
 
 // ─── M3: prayer chain, notifications, background jobs ─────────────────────────
 export const PRAYER_CHAIN_TYPES = ['continuous', 'scheduled_blocks', 'event'] as const;
@@ -127,6 +125,22 @@ export const NOTIFICATION_STATUSES = ['pending', 'processing', 'sent', 'partiall
 export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'sms', 'push'] as const;
 export const DELIVERY_STATUSES = ['queued', 'sent', 'delivered', 'failed', 'bounced'] as const;
 export const JOB_RUN_STATUSES = ['running', 'ok', 'error'] as const;
+
+// ─── M4: devotional / worship, shared scheduling ──────────────────────────────
+export const SERVING_ROLE_CATEGORIES = ['music', 'word', 'prayer', 'production', 'hosting', 'other'] as const;
+export const ROTATION_MODES = ['none', 'per_occurrence', 'weekly'] as const;
+export const GATHERING_STATUSES = ['scheduled', 'cancelled', 'completed'] as const;
+export const GATHERING_ASSIGNMENT_STATUSES = ['pending', 'confirmed', 'declined', 'replaced', 'cancelled'] as const;
+/** Assignments that hold a place on the roster (BR-D-01). */
+export const GATHERING_ACTIVE_STATUSES = ['pending', 'confirmed'] as const;
+export const GATHERING_ASSIGNMENT_SOURCES = ['rotation', 'manual', 'substitute'] as const;
+export const UNAVAILABILITY_SOURCES = ['self', 'coordinator', 'admin'] as const;
+
+export type ServingRoleCategory = (typeof SERVING_ROLE_CATEGORIES)[number];
+export type RotationMode = (typeof ROTATION_MODES)[number];
+export type GatheringStatus = (typeof GATHERING_STATUSES)[number];
+export type GatheringAssignmentStatus = (typeof GATHERING_ASSIGNMENT_STATUSES)[number];
+export type GatheringAssignmentSource = (typeof GATHERING_ASSIGNMENT_SOURCES)[number];
 
 export type PrayerChainType = (typeof PRAYER_CHAIN_TYPES)[number];
 export type PrayerChainStatus = (typeof PRAYER_CHAIN_STATUSES)[number];
