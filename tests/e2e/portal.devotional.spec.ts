@@ -1,6 +1,6 @@
-import { devices, expect, test } from '@playwright/test';
-import { E2E_ADMIN_EMAIL, E2E_BASE_URL, E2E_MEMBER } from './support/e2e-env';
-import { signIn } from './support/sign-in';
+import { devices } from '@playwright/test';
+import { E2E_BASE_URL, E2E_MEMBER } from './support/e2e-env';
+import { expect, test } from './support/fixtures';
 
 const TEAM_NAME = 'Team A';
 const memberName = `${E2E_MEMBER.firstName} ${E2E_MEMBER.lastName}`;
@@ -11,7 +11,7 @@ const ministryDate = (daysAhead: number) => new Intl.DateTimeFormat('en-CA', { t
 test('a coordinator builds a worship team and a roster, and a member says yes with their personal link', async ({ page, browser }) => {
   // The first visits compile several portal and public pages on the dev server.
   test.setTimeout(240_000);
-  await signIn(page, E2E_ADMIN_EMAIL);
+  await page.goto('/app');
 
   // A worship team whose one member usually leads worship.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Devotional' }).click();

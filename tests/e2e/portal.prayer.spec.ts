@@ -1,6 +1,6 @@
-import { devices, expect, test } from '@playwright/test';
-import { E2E_ADMIN_EMAIL, E2E_BASE_URL, E2E_MEMBER } from './support/e2e-env';
-import { signIn } from './support/sign-in';
+import { devices } from '@playwright/test';
+import { E2E_BASE_URL, E2E_MEMBER } from './support/e2e-env';
+import { expect, test } from './support/fixtures';
 
 /** Public forms turn away anything sent within two seconds of the page loading (bot protection). */
 const HUMAN_PAUSE_MS = 2_500;
@@ -10,7 +10,7 @@ const memberName = `${E2E_MEMBER.firstName} ${E2E_MEMBER.lastName}`;
 test('a coordinator starts a prayer chain and assigns a member, who confirms with their personal link', async ({ page, browser }) => {
   // The first visits compile several portal and public pages on the dev server.
   test.setTimeout(240_000);
-  await signIn(page, E2E_ADMIN_EMAIL);
+  await page.goto('/app');
 
   // Create the chain with the default pattern (24 hourly slots a day) and start it.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Prayer Chain' }).click();

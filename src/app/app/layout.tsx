@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { BrandMark } from '@/components/brand/brand-mark';
 import { NAV_ITEMS } from '@/components/portal/nav-items';
 import { SidebarNav } from '@/components/portal/sidebar-nav';
+import { SkipLink } from '@/components/portal/skip-link';
 import { Button } from '@/components/ui/button';
 import { countUnreadNotifications } from '@/server/modules/notifications/notifications.service';
 import { hasChainScope, hasPermission } from '@/server/policy/can';
@@ -19,6 +20,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[260px_1fr]">
+      <SkipLink />
       <aside className="border-b border-line bg-surface print:hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between px-5 py-4 lg:py-6">
           <Link href="/app" aria-label="GenTouch dashboard">
@@ -39,7 +41,9 @@ export default async function PortalLayout({ children }: { children: React.React
         </div>
       </aside>
       <div className="min-w-0">
-        <main className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10">{children}</main>
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1200px] px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-10">
+          {children}
+        </main>
         <div className="border-t border-line px-4 py-4 print:hidden lg:hidden">
           <form action={signOutAction}>
             <Button type="submit" variant="ghost" size="sm">

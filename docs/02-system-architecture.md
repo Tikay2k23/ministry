@@ -381,6 +381,13 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
 | **Supply chain** | Lockfile, Renovate/Dependabot, `pnpm audit` in CI, minimal dependencies on public routes |
 | **Insider misuse** | Least privilege, access log of sensitive reads, break-glass access with a stated reason (notifies pastors), periodic access review report |
 
+**Implementation note (M5.3, 2026-09-17): sign-in rate limits.**
+- **The actual limits:** besides the configured `rateLimit` (60 requests a minute per IP, `src/server/auth/config.ts`), Better Auth 1.7's magic-link plugin allows 5 requests per IP to `/sign-in/magic-link`, and 5 to `/magic-link/verify`. Each allowed request restarts a one-minute clock, so the count clears only after a quiet minute.
+- **How the E2E suite found it:** every test runs from one address, and the suite signed in often enough to be refused. Tests not about signing in now share one session (`tests/e2e/support/fixtures.ts`).
+- **Pilot risk (docs/07, known M5 issues):** people on one connection share the budget, such as a church Wi-Fi or a mobile carrier's shared address.
+- **Production storage:** counts are kept in memory by default, which on Vercel means per instance.
+- **Proposed for 5.6:** raise the per-IP limit for these two routes, add a per-email limit in the app, and keep the counts in Upstash Redis.
+
 ### 8.2 Security headers (all routes)
 `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` · `Content-Security-Policy` (nonce-based, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`) · `Referrer-Policy: strict-origin-when-cross-origin` (`no-referrer` on token routes) · `Permissions-Policy: camera=(), microphone=(), geolocation=()` · `X-Content-Type-Options: nosniff` · `Cross-Origin-Opener-Policy: same-origin`.
 

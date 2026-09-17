@@ -76,6 +76,11 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* A nested `overflow-x-auto` (a wide table, e.g. People) can otherwise make the whole
+       document natively pannable by the same amount, even though nothing visibly crosses the
+       viewport edge: Chromium's root scrollWidth counts a descendant scroll container's content,
+       not just its box. This never affects that container's own scrolling, only the page's. */
+    overflow-x: hidden;
   }
   body {
     background: var(--color-ground);
@@ -83,6 +88,7 @@
     font-family: var(--font-sans);
     font-size: 16px;
     line-height: 1.5;
+    overflow-x: hidden;
   }
   h1,
   h2,
