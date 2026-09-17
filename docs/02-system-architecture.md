@@ -388,6 +388,19 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
 - **Production storage:** counts are kept in memory by default, which on Vercel means per instance.
 - **Proposed for 5.6:** raise the per-IP limit for these two routes, add a per-email limit in the app, and keep the counts in Upstash Redis.
 
+**Implementation note (M5.6, 2026-09-18): sign-in rate limits, as built.** The ministry approved the change above. `src/server/auth/rate-limit.ts` holds all three parts, and `tests/integration/auth.test.ts` covers them.
+
+| | Before | Now |
+|---|---|---|
+| Per IP, `/sign-in/magic-link` and `/magic-link/verify` separately | 5 a minute | **30 a minute** (the magic-link plugin's own `rateLimit` option) |
+| Per email address, requesting a link | — | **10 per 15 minutes**, so one inbox cannot be flooded through the larger IP allowance |
+| Where counts live | Better Auth's memory, per serverless instance | The store the public endpoints already use (`RATE_LIMIT_STORE`: Upstash in production, a Postgres table elsewhere), through `rateLimit.customStorage` |
+| When a blocked caller is free again | After a full quiet minute — every allowed request pushed the window forward | At the end of the fixed window |
+
+- **No enumeration:** the per-address limit runs in a `before` hook, ahead of the account lookup, so an unknown address is counted and refused exactly like a real one. A 429 therefore says nothing about who has an account. The test asserts this for both.
+- **Why 30 and 10:** a leaders' onboarding session is a dozen people on one address, each requesting a link and then opening it; 30 a minute per path carries that with room to spare, while still stopping a script. Ten emails per address per quarter of an hour covers a leader retrying two or three times and bounds one inbox at 40 messages an hour.
+- **Rejected:** `rateLimit.storage: 'database'` would have needed a new table and a migration, and `'secondary-storage'` would have moved session storage out of PostgreSQL, which `src/server/next/context.ts` reads directly for `two_factor_verified_at`.
+
 ### 8.2 Security headers (all routes)
 `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` · `Content-Security-Policy` (nonce-based, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`) · `Referrer-Policy: strict-origin-when-cross-origin` (`no-referrer` on token routes) · `Permissions-Policy: camera=(), microphone=(), geolocation=()` · `X-Content-Type-Options: nosniff` · `Cross-Origin-Opener-Policy: same-origin`.
 

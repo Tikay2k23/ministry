@@ -10,6 +10,7 @@ import { authAccounts, authSessions, authVerifications, users } from '../db/sche
 import type { EmailMessage } from '../email/email';
 import { magicLinkEmail } from '../email/templates';
 import { recordAudit } from '../modules/audit/audit.service';
+import { magicLinkEmailLimit, MAGIC_LINK_PER_IP, sharedRateLimitStorage } from './rate-limit';
 
 export const MAGIC_LINK_MINUTES = 15;
 
@@ -62,7 +63,9 @@ export function createAuth(deps: AuthDependencies) {
       cookiePrefix: 'gentouch',
       database: { generateId: () => newId() },
     },
-    rateLimit: { enabled: true, window: 60, max: 60 },
+    // Counters in the store every instance shares, not in memory (./rate-limit.ts).
+    rateLimit: { enabled: true, window: 60, max: 60, customStorage: sharedRateLimitStorage(db) },
+    hooks: { before: magicLinkEmailLimit(db) },
     databaseHooks: {
       session: {
         create: {
@@ -105,6 +108,8 @@ export function createAuth(deps: AuthDependencies) {
       magicLink({
         disableSignUp: true,
         expiresIn: MAGIC_LINK_MINUTES * 60,
+        // Raised for shared church Wi-Fi and mobile carriers; a per-address limit backs it up.
+        rateLimit: MAGIC_LINK_PER_IP,
         storeToken: 'hashed',
         sendMagicLink: async ({ email, url }) => {
           await deps.sendEmail(magicLinkEmail(email, url, MAGIC_LINK_MINUTES));

@@ -96,6 +96,80 @@ jobs:
         env:
           SEED_ADMIN_EMAIL: admin@example.org
 
+  restore:
+    name: Backup and restore drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gentouch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/gentouch
+      RESTORED_URL: postgres://postgres:postgres@localhost:5432/gentouch_restored
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: gentouch
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      # A database worth losing: the real schema, reference data and a ministry of ~1,900 people.
+      - name: Build a database to back up
+        run: npm run db:migrate && npm run db:seed && npm run db:seed:demo -- --allow-postgres
+        env:
+          SEED_ADMIN_EMAIL: admin@example.org
+
+      - name: Record what is in it
+        run: |
+          psql -tAc "SELECT 'people=' || count(*) FROM people" | tee before.txt
+          psql -tAc "SELECT 'nodes=' || count(*) FROM hierarchy_nodes" | tee -a before.txt
+          psql -tAc "SELECT 'closure=' || count(*) FROM hierarchy_closure" | tee -a before.txt
+          psql -tAc "SELECT 'days=' || count(*) FROM journal_days" | tee -a before.txt
+          psql -tAc "SELECT 'answers=' || count(*) FROM form_answer_sets" | tee -a before.txt
+          cat before.txt
+
+      # pg_dump and pg_restore run from the same image as the server, so the versions always match
+      # (a Supabase restore is the same pair of commands against a downloaded backup).
+      - name: Back it up
+        run: |
+          docker run --rm --network host -e PGPASSWORD=postgres -v "$PWD:/work" -w /work postgres:17 \
+            pg_dump --format=custom --no-owner --no-privileges -h localhost -U postgres -d gentouch -f backup.dump
+          ls -lh backup.dump
+
+      - name: Restore it into an empty database
+        run: |
+          psql -c "CREATE DATABASE gentouch_restored"
+          docker run --rm --network host -e PGPASSWORD=postgres -v "$PWD:/work" -w /work postgres:17 \
+            pg_restore --no-owner --no-privileges --exit-on-error -h localhost -U postgres -d gentouch_restored backup.dump
+
+      - name: Check the restored copy is whole
+        run: npm run db:check -- "$RESTORED_URL"
+
+      - name: Compare it with the original
+        run: |
+          psql -d gentouch_restored -tAc "SELECT 'people=' || count(*) FROM people" > after.txt
+          psql -d gentouch_restored -tAc "SELECT 'nodes=' || count(*) FROM hierarchy_nodes" >> after.txt
+          psql -d gentouch_restored -tAc "SELECT 'closure=' || count(*) FROM hierarchy_closure" >> after.txt
+          psql -d gentouch_restored -tAc "SELECT 'days=' || count(*) FROM journal_days" >> after.txt
+          psql -d gentouch_restored -tAc "SELECT 'answers=' || count(*) FROM form_answer_sets" >> after.txt
+          if ! diff -u before.txt after.txt; then echo "✗ the restored copy does not match the original"; exit 1; fi
+          echo "✓ every counted table matches"
+
   e2e:
     name: End-to-end tests (Playwright)
     runs-on: ubuntu-latest

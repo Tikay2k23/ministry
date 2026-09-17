@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAuth, type Auth } from '@/server/auth/config';
+import { MAGIC_LINK_PER_EMAIL, sharedRateLimitStorage } from '@/server/auth/rate-limit';
 import type { DatabaseHandle } from '@/server/db/client';
 import { authSessions, users } from '@/server/db/schema';
 import { seedReferenceData } from '@/server/db/seed/reference-data';
@@ -82,6 +83,40 @@ describe('portal sign-in with magic links (Better Auth)', () => {
     }
     const found = await handle.db.select().from(users).where(eq(users.email, 'stranger@example.org'));
     expect(found).toHaveLength(0);
+  });
+
+  it('lets a room full of leaders on one connection sign in (docs/07 M5.6)', async () => {
+    // Every request here shares one address, as a church Wi-Fi or a carrier's subscribers do.
+    // Better Auth's own default of 5 a minute refused the sixth; the raised limit is 30.
+    const statuses: number[] = [];
+    for (let i = 0; i < 12; i++) statuses.push((await requestLink(`leader-${i}@gentouch.test`)).status);
+    expect(statuses.filter((s) => s === 429)).toEqual([]);
+  });
+
+  it('stops one inbox being flooded, for a real address and an unknown one alike', async () => {
+    const seen: number[] = [];
+    for (let i = 0; i < MAGIC_LINK_PER_EMAIL.limit + 1; i++) seen.push((await requestLink('flooded@gentouch.test')).status);
+
+    expect(seen.slice(0, MAGIC_LINK_PER_EMAIL.limit)).not.toContain(429);
+    expect(seen.at(-1)).toBe(429);
+
+    // An address with no account is counted and answered identically, so 429 tells an attacker
+    // nothing about who has an account.
+    const unknown: number[] = [];
+    for (let i = 0; i < MAGIC_LINK_PER_EMAIL.limit + 1; i++) unknown.push((await requestLink('nobody@example.org')).status);
+    expect(unknown.at(-1)).toBe(429);
+  });
+
+  it('counts sign-in attempts in the shared store, so every instance sees the same total', async () => {
+    // What Better Auth calls for its per-IP counters. Two instances would call the same store.
+    const storage = sharedRateLimitStorage(handle.db);
+    const key = `test-${Date.now()}`;
+    expect(await storage.consume(key, { window: 60, max: 2 })).toEqual({ allowed: true, retryAfter: null });
+    expect(await storage.consume(key, { window: 60, max: 2 })).toEqual({ allowed: true, retryAfter: null });
+
+    const blocked = await storage.consume(key, { window: 60, max: 2 });
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfter).toBeGreaterThan(0);
   });
 
   it('refuses to sign in a deactivated account', async () => {

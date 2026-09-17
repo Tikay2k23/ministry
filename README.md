@@ -77,7 +77,7 @@ Journal answers and CSV exports are sensitive. They stay locked until the signed
 
 ## Deploying (Vercel + Supabase)
 
-Not done yet. The code is prepared for it; these are the steps, in order.
+Not done yet, but prepared and written up: **[docs/runbooks/deployment.md](docs/runbooks/deployment.md)** is the full runbook (accounts, secrets, every environment variable, the first deployment, each one after, rolling back), and **[docs/runbooks/recovery.md](docs/runbooks/recovery.md)** covers backups, restoring, leaked secrets and lost access. After any deploy, run `npm run smoke -- <url>`. The short version of the steps:
 
 1. **Supabase** (Singapore region): create the project. Set `DATABASE_URL` to the transaction pooler and `DATABASE_URL_MIGRATOR` to the session pooler or direct connection. Supabase connections need SSL with Supabase's certificate, which is configured at this step. Then run `npm run db:migrate` and `npm run db:seed` against it.
 2. **App database role** (recommended): `CREATE ROLE app_rw LOGIN PASSWORD '…' IN ROLE gentouch_app;` and use `app_rw` in `DATABASE_URL`. The app then has no DDL rights and can only add audit entries, never change them.

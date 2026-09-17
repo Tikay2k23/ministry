@@ -16,7 +16,7 @@
 | 6 · Permission matrix (roles × resources × actions, sensitive-data table, tests) | [06-permission-matrix.md](06-permission-matrix.md) |
 | 7 · Roadmap, risks, QA strategy, Phase 8 plan | [07-roadmap.md](07-roadmap.md) |
 
-Working documents, added while building: [accessibility-checklist.md](accessibility-checklist.md) (the manual screen-reader pass) and [pilot/](pilot/) — the [leader quick start](pilot/leader-quick-start.md), the [video script](pilot/video-script.md) and the [pilot plan](pilot/pilot-plan.md).
+Working documents, added while building: [accessibility-checklist.md](accessibility-checklist.md) (the manual screen-reader pass), [pilot/](pilot/) — the [leader quick start](pilot/leader-quick-start.md), the [video script](pilot/video-script.md) and the [pilot plan](pilot/pilot-plan.md) — and [runbooks/](runbooks/) for [deployment](runbooks/deployment.md) and [recovery](runbooks/recovery.md).
 
 ---
 

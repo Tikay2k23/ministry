@@ -22,6 +22,8 @@
     "db:seed": "node --env-file-if-exists=.env --import tsx src/server/db/scripts/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
     "db:seed:demo": "node --env-file-if-exists=.env --import tsx src/server/db/scripts/seed-demo.ts",
+    "db:check": "node --env-file-if-exists=.env --import tsx src/server/db/scripts/integrity-check.ts",
+    "smoke": "node scripts/smoke.mjs",
     "check": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {

@@ -23,7 +23,8 @@ export function SignInForm() {
       errorCallbackURL: '/sign-in?error=link',
     });
     if (error?.status === 429) {
-      setState({ kind: 'error', message: 'Too many attempts. Please wait a minute and try again.' });
+      // The per-address limit explains itself (src/server/auth/rate-limit.ts); the per-IP one doesn't.
+      setState({ kind: 'error', message: error.message || 'Too many attempts from this connection. Please wait a minute and try again.' });
       return;
     }
     // Same message whether or not the address has an account (no account enumeration).
