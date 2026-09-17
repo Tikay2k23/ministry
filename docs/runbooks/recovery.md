@@ -117,5 +117,5 @@ If journal answers were visible to someone the settings do not allow, this is th
 
 | Drill | Date | Time taken | By |
 |---|---|---|---|
-| CI drill | every push | ~2 min | automated |
+| CI drill | every push | ~1 min | automated |
 | Production restore rehearsal | ✎ | ✎ | ✎ |

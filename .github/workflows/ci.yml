@@ -136,6 +136,10 @@ jobs:
 
       - name: Record what is in it
         run: |
+          # A drill that restores an empty database proves nothing, so insist on a real ministry.
+          people="$(psql -tAc "SELECT count(*) FROM people")"
+          if [ "$people" -lt 1000 ]; then echo "✗ only $people people: the demo seed did not run"; exit 1; fi
+          echo "✓ $people people to back up"
           psql -tAc "SELECT 'people=' || count(*) FROM people" | tee before.txt
           psql -tAc "SELECT 'nodes=' || count(*) FROM hierarchy_nodes" | tee -a before.txt
           psql -tAc "SELECT 'closure=' || count(*) FROM hierarchy_closure" | tee -a before.txt
