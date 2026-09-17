@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client';
 import { scheduledJobs } from '../../db/schema';
 import { errorSummary, logger } from '../../logger';
+import { alertJobFailure } from './alerts';
 
 /**
  * In-app scheduler (docs/02 §7, M3 note). Replaces the planned Graphile Worker, which needs a
@@ -15,6 +16,8 @@ import { errorSummary, logger } from '../../logger';
 
 export interface JobDefinition {
   key: string;
+  /** What the job does, in words for System health and failure alerts. */
+  label: string;
   everyMinutes: number;
   run(db: Database, now: Date): Promise<object | void>;
 }
@@ -86,6 +89,11 @@ export async function runDueJobs(db: Database, jobs: readonly JobDefinition[], n
         })
         .where(eq(scheduledJobs.jobKey, job.key));
       results.push({ key: job.key, status: 'error', error: message });
+      try {
+        await alertJobFailure(db, job, message, now);
+      } catch (alertError) {
+        logger.error('Could not alert administrators about a failed job', alertError, { job: job.key });
+      }
     }
   }
   return results;

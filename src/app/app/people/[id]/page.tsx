@@ -16,6 +16,7 @@ import { grantableRolesForPerson } from '@/server/modules/iam/users.service';
 import { canAccessPerson, hasGlobal, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
+import { activityActor, activityLabel, fieldLabel } from './activity-labels';
 import { MinistryMembershipForm } from './ministry-membership-form';
 import { PauseManager } from './pause-manager';
 import { PersonalLinkCard } from './personal-link-card';
@@ -300,15 +301,21 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
 
           {detail.audit && detail.audit.length > 0 && (
             <Section title="Activity">
-              <ul className="space-y-2 text-sm">
-                {detail.audit.map((a, i) => (
-                  <li key={i} className="flex flex-wrap justify-between gap-2">
-                    <span>
-                      <code className="text-xs">{a.action}</code> {a.actorName && <span className="text-muted">by {a.actorName}</span>}
-                    </span>
-                    <span className="tabular text-muted">{formatDateTime(a.occurredAt, detail.timezone)}</span>
-                  </li>
-                ))}
+              <ul className="space-y-3 text-sm">
+                {detail.audit.map((a, i) => {
+                  const actor = activityActor(a);
+                  return (
+                    <li key={i} className="border-l-2 border-line pl-3">
+                      <p className="font-medium">{activityLabel(a.action)}</p>
+                      <p className="text-muted">
+                        {actor && <>By {actor} · </>}
+                        <span className="tabular">{formatDateTime(a.occurredAt, detail.timezone)}</span>
+                      </p>
+                      {a.action === 'person.updated' && a.fields.length > 0 && <p className="text-muted">Changed: {a.fields.map(fieldLabel).join(', ')}</p>}
+                      {a.reason && <p className="text-muted">“{a.reason}”</p>}
+                    </li>
+                  );
+                })}
               </ul>
             </Section>
           )}

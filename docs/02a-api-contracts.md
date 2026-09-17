@@ -281,6 +281,26 @@ Every mutation writes an `audit_logs` row in the same transaction. Operations ma
 | `audit.forEntity` | view permission on the entity + `audit.view.entity` | `{ entityType, entityId, cursor }` | history tab |
 | `system.health` | `settings.manage` | — | job queue depth, failed jobs, last cron runs, provider status |
 
+**Implementation note (M5.2, 2026-09-17).** Server actions in `src/app/app/admin/actions.ts`; services in `src/server/modules/settings/`.
+
+| Page | Operations |
+|---|---|
+| `/app/admin/settings` | `settings.get` / `settings.update` for Daily Journal, Leadership (with level names), General, People fields, Public journal page and Privacy. Open with `settings.view` or a global `journal.settings.manage` |
+| `/app/admin/health` | `system.health` and "Run now" |
+
+- **`settings.update`:**
+  - **Permissions:** the journal policy needs a global `journal.settings.manage`, so pastors can change it (docs/06 row 20). Every other key needs `settings.manage`.
+  - **Journal visibility:** raising `contentVisibilityDepth`, which lets more leaders read journal answers, also needs a two-step-verified session (`FORBIDDEN`). Lowering it doesn't.
+  - **Validation and audit:** invalid values return `VALIDATION_ERROR` with per-field messages, and an unknown key returns `NOT_FOUND`. Each change is audited as `settings.updated` with its old and new values.
+  - The forms render the saved values on the server, so fields never look empty before the page's scripts load.
+- **Leadership level names:** `saveLeadershipLevels({ levels: [{ name, pluralName, description? }] })` replaces the names from the top down (depth 0 first), removes deeper levels, needs `settings.manage`, and is audited.
+- **`system.health`:**
+  - **Contents:** every job with its label, interval, last and next run, run and failure counts, and last error summary. Also notifications waiting, sent in the last day and failed in the last week, the database size, and which providers are in use (never keys).
+  - **Stalled scheduler:** it is reported stalled when no job has started for 15 minutes, with advice for the scheduler mode.
+  - **"Run now":** `runJobSoon({ jobKey })` makes the job due at the next tick (within a minute) and is audited as `system.job_run_requested`.
+- **`audit.forEntity`:** the person profile's Activity list shows the last 20 entries in plain words: who did it, when, and for profile edits the names of the changed fields. Old and new values never leave the server. Access-log entries are recorded against entries and reports, never people, so they don't appear. The global audit viewer (A28) is still V1.
+- **Not built yet:** publishing a new privacy notice from the portal (the approved text replaces the draft in `src/app/(public)/privacy/page.tsx`, and `privacy.noticeVersion` records the version), the retention, prayer-default and notification settings, and QR code management (A27, part 5.4).
+
 ---
 
 ## 4. Core DTO sketches

@@ -18,6 +18,7 @@ export interface NavItem {
     | 'reports'
     | 'ministries'
     | 'users'
+    | 'settings'
     | 'notifications'
     | 'account';
   section: 'main' | 'organisation' | 'admin' | 'personal';
@@ -42,6 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/app/reports', label: 'Reports', icon: 'reports', section: 'main', permission: 'reports.view' },
   { href: '/app/ministries', label: 'Ministries', icon: 'ministries', section: 'organisation', permission: 'ministries.view' },
   { href: '/app/admin/users', label: 'Users & Permissions', icon: 'users', section: 'admin', permission: 'iam.users.view' },
+  { href: '/app/admin/settings', label: 'Settings', icon: 'settings', section: 'admin', permission: 'settings.view' },
   { href: '/app/notifications', label: 'Notifications', icon: 'notifications', section: 'personal' },
   { href: '/app/account/security', label: 'My account', icon: 'account', section: 'personal' },
 ];

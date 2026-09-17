@@ -415,15 +415,35 @@ export async function getPersonDetail(db: Executor, ctx: RequestContext, personI
     }
   }
 
+  // The record's history (docs/04 A28, FR-AUD-03): what changed and who changed it. Only the names
+  // of changed fields leave this function, never their old or new values.
   const audit =
     canSeeEntityAudit || hasGlobal(ctx, 'audit.view')
-      ? await db
-          .select({ action: auditLogs.action, occurredAt: auditLogs.occurredAt, actorName: users.name, reason: auditLogs.reason })
-          .from(auditLogs)
-          .leftJoin(users, eq(users.id, auditLogs.actorUserId))
-          .where(and(eq(auditLogs.entityType, 'person'), eq(auditLogs.entityId, personId)))
-          .orderBy(desc(auditLogs.occurredAt))
-          .limit(15)
+      ? (
+          await db
+            .select({
+              action: auditLogs.action,
+              occurredAt: auditLogs.occurredAt,
+              actorName: users.name,
+              actorType: auditLogs.actorType,
+              reason: auditLogs.reason,
+              oldValues: auditLogs.oldValues,
+              newValues: auditLogs.newValues,
+            })
+            .from(auditLogs)
+            .leftJoin(users, eq(users.id, auditLogs.actorUserId))
+            .where(and(eq(auditLogs.entityType, 'person'), eq(auditLogs.entityId, personId)))
+            .orderBy(desc(auditLogs.occurredAt))
+            .limit(20)
+        ).map(({ oldValues, newValues, ...entry }) => ({
+          ...entry,
+          fields: [
+            ...new Set([
+              ...Object.keys((oldValues as Record<string, unknown> | null) ?? {}),
+              ...Object.keys((newValues as Record<string, unknown> | null) ?? {}),
+            ]),
+          ],
+        }))
       : null;
 
   const leaderLink = chain.at(-1);

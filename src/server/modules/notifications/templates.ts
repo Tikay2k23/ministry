@@ -16,7 +16,7 @@ export interface NotificationContent {
 }
 
 export interface TemplateDefinition {
-  category: 'prayer' | 'prayer_coordination' | 'devotional' | 'devotional_coordination';
+  category: 'prayer' | 'prayer_coordination' | 'devotional' | 'devotional_coordination' | 'system';
   /** Send by email when the recipient has an address. */
   email: boolean;
   /** A fresh personal link, created at send time, for the assignment in `payload.assignmentId`. */
@@ -145,6 +145,18 @@ export const NOTIFICATION_TEMPLATES = {
       body: `${str(p, 'roleName')} for ${str(p, 'gatheringName')} on ${str(p, 'dateLabel')} is still open.`,
       portalPath: `/app/devotional/${str(p, 'gatheringId')}`,
       actionLabel: 'Open the roster',
+    }),
+  },
+  // For the system's administrators (src/server/modules/scheduler/alerts.ts). By email too:
+  // a job that stops quietly would otherwise be noticed only when members miss their reminders.
+  'system.job_failed': {
+    category: 'system',
+    email: true,
+    render: (p) => ({
+      title: 'A background job failed',
+      body: `“${str(p, 'jobLabel')}” failed and will try again in a few minutes. The error was: ${str(p, 'error')}. If it keeps failing, check System health.`,
+      portalPath: '/app/admin/health',
+      actionLabel: 'Open System health',
     }),
   },
 } satisfies Record<string, TemplateDefinition>;

@@ -354,6 +354,10 @@ It is idempotent and cheap when there is nothing to do, and the M3 worker will c
   - `notifications.deliver` every minute.
   - Journal reminders and leader digests come later.
 - **Failures:** a failed job is retried after 5 minutes. Its last error is stored without personal data (`errorSummary` in `src/server/logger.ts`) for Settings → System health.
+- **Alerts (M5.2):**
+  - A failure also sends the `system.job_failed` notice to every holder of a global `settings.manage` (active or invited), in the inbox and by email.
+  - It goes out at most once per job per person per day, with the job's name and the error summary.
+  - System health (`/app/admin/health`) also warns when no job has started for 15 minutes.
 
 ---
 

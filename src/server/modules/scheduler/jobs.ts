@@ -18,17 +18,18 @@ export const JOBS: readonly JobDefinition[] = [
     // journal.open_day + journal.resync_day + journal.close_day: days now close on time even
     // when nobody opens the journal (the same function still runs on every journal request).
     key: 'journal.ledger',
+    label: 'Opening and closing journal days',
     everyMinutes: 5,
     run: async (db, now) => {
       const result = await ensureJournalLedger(db, now);
       return { opened: result.opened.length, resynced: result.resynced.length, closed: result.closed.length };
     },
   },
-  { key: 'prayer.generate_slots', everyMinutes: 60, run: generateUpcomingSlots },
-  { key: 'prayer.check_overdue', everyMinutes: 5, run: flagOverdueAssignments },
-  { key: 'prayer.slot_reminders', everyMinutes: 5, run: sendSlotReminders },
-  { key: 'devotional.generate_gatherings', everyMinutes: 60, run: generateUpcomingGatherings },
-  { key: 'devotional.confirmation_reminders', everyMinutes: 15, run: sendServingReminders },
-  { key: 'tokens.cleanup', everyMinutes: 24 * 60, run: cleanupExpiredRecords },
-  { key: 'notifications.deliver', everyMinutes: 1, run: deliverDueNotifications },
+  { key: 'prayer.generate_slots', label: 'Creating prayer slots ahead', everyMinutes: 60, run: generateUpcomingSlots },
+  { key: 'prayer.check_overdue', label: 'Checking prayer slots nobody finished', everyMinutes: 5, run: flagOverdueAssignments },
+  { key: 'prayer.slot_reminders', label: 'Prayer slot reminders', everyMinutes: 5, run: sendSlotReminders },
+  { key: 'devotional.generate_gatherings', label: 'Creating gatherings and rosters ahead', everyMinutes: 60, run: generateUpcomingGatherings },
+  { key: 'devotional.confirmation_reminders', label: 'Serving reminders', everyMinutes: 15, run: sendServingReminders },
+  { key: 'tokens.cleanup', label: 'Clearing expired links and counters', everyMinutes: 24 * 60, run: cleanupExpiredRecords },
+  { key: 'notifications.deliver', label: 'Sending emails and notices', everyMinutes: 1, run: deliverDueNotifications },
 ];

@@ -1,5 +1,7 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { DatabaseHandle } from '@/server/db/client';
+import { notifications } from '@/server/db/schema';
 import { JOBS } from '@/server/modules/scheduler/jobs';
 import { listJobStatus, runDueJobs, type JobDefinition } from '@/server/modules/scheduler/scheduler.service';
 import { createTestDatabase } from '../helpers/db';
@@ -49,6 +51,7 @@ describe('background jobs (docs/02 §7 note)', () => {
     const failing: JobDefinition[] = [
       {
         key: 'test.failing',
+        label: 'A job that always fails',
         everyMinutes: 60,
         run: async () => {
           throw Object.assign(new Error('Failed query: select 1\nparams: +639171234567'), { query: 'select 1', params: ['+639171234567'] });
@@ -64,6 +67,18 @@ describe('background jobs (docs/02 §7 note)', () => {
     expect(status?.lastStatus).toBe('error');
     expect(status?.lastError).not.toContain('+639171234567');
     expect(status?.nextRunAt.toISOString()).toBe('2026-09-16T02:05:00.000Z');
+
+    // The Super Admin hears about it once that day, with the summary but no personal data.
+    const alerts = await handle.db.select().from(notifications).where(eq(notifications.templateKey, 'system.job_failed'));
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]!.payload).toMatchObject({ jobLabel: 'A job that always fails' });
+    expect(JSON.stringify(alerts[0]!.payload)).not.toContain('+639171234567');
+    await runDueJobs(handle.db, failing, at('2026-09-16T02:06:00Z'));
+    expect(await handle.db.select().from(notifications).where(eq(notifications.templateKey, 'system.job_failed'))).toHaveLength(1);
     vi.restoreAllMocks();
+  });
+
+  it('gives every job a label for System health', () => {
+    expect(JOBS.filter((job) => job.label.trim().length < 5)).toEqual([]);
   });
 });
