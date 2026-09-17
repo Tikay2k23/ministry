@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { movePerson, placePerson } from '@/server/modules/hierarchy/hierarchy.service';
+import { movePerson, placePerson, setAcceptsMembers } from '@/server/modules/hierarchy/hierarchy.service';
 import { requestLeaderChange } from '@/server/modules/hierarchy/leader-change.service';
 import { assignRole, findAccountForPerson, inviteUser, revokeRole } from '@/server/modules/iam/users.service';
 import { addMinistryMember } from '@/server/modules/ministries/ministries.service';
@@ -88,6 +88,18 @@ export async function changeLeaderAction(formData: FormData) {
   if (result.ok) {
     revalidatePath(`/app/people/${personId}`);
     revalidatePath('/app/leadership');
+  }
+  return result;
+}
+
+/** Whether a leader appears in the public leader selector and can receive new people from their QR code (FR-LDR-08). */
+export async function setAcceptsMembersAction(personId: string, acceptsMembers: boolean) {
+  const { ctx } = await requirePortal();
+  const result = await runAction(() => setAcceptsMembers(getDb(), ctx, { personId, acceptsMembers }));
+  if (result.ok) {
+    revalidatePath(`/app/people/${personId}`);
+    revalidatePath('/app/leadership');
+    revalidatePath('/app/admin/qr', 'layout');
   }
   return result;
 }

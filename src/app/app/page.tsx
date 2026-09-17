@@ -10,7 +10,7 @@ import { getJournalOverview, listAwaitingReview } from '@/server/modules/journal
 import { listUnconfirmedRegistrations } from '@/server/modules/people/registrations.service';
 import { listChains } from '@/server/modules/prayer/chains.service';
 import { getSetting } from '@/server/modules/settings/settings.service';
-import { canAccessChain, hasChainScope, hasPermission } from '@/server/policy/can';
+import { canAccessChain, hasChainScope, hasGlobal, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
 import { ReplyCounts } from './devotional/reply-counts';
@@ -71,7 +71,9 @@ export default async function DashboardPage() {
     // Importing is a sensitive permission: until it's usable (two-step verification), the page would be a 404.
     { label: 'Import your people and leadership structure', done: false, href: hasPermission(ctx, 'import.manage') ? '/app/people/import' : undefined },
     { label: 'Invite your pastors and ministry office', done: false, href: '/app/admin/users' },
-    { label: 'Print journal QR codes for your leaders', done: false, note: 'Open a leader’s profile and choose “journal QR code”.' },
+    hasGlobal(ctx, 'links.manage')
+      ? { label: 'Print journal QR codes for your leaders', done: false, href: '/app/admin/qr', note: 'A branch’s cards print together, four to an A4 page.' }
+      : { label: 'Print journal QR codes for your leaders', done: false, note: 'Open a leader’s profile and choose “journal QR code”.' },
   ];
 
   const s = journal?.summary;

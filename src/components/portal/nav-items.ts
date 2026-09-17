@@ -19,6 +19,7 @@ export interface NavItem {
     | 'ministries'
     | 'users'
     | 'settings'
+    | 'qr'
     | 'notifications'
     | 'account';
   section: 'main' | 'organisation' | 'admin' | 'personal';
@@ -44,6 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/app/ministries', label: 'Ministries', icon: 'ministries', section: 'organisation', permission: 'ministries.view' },
   { href: '/app/admin/users', label: 'Users & Permissions', icon: 'users', section: 'admin', permission: 'iam.users.view' },
   { href: '/app/admin/settings', label: 'Settings', icon: 'settings', section: 'admin', permission: 'settings.view' },
+  { href: '/app/admin/qr', label: 'QR codes', icon: 'qr', section: 'admin', permission: 'links.manage' },
   { href: '/app/notifications', label: 'Notifications', icon: 'notifications', section: 'personal' },
   { href: '/app/account/security', label: 'My account', icon: 'account', section: 'personal' },
 ];

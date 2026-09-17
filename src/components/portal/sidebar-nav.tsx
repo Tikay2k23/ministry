@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Church, ClipboardList, HandHeart, HeartHandshake, LayoutDashboard, Music, Network, NotebookPen, Settings, ShieldCheck, UsersRound, UserRoundCog } from 'lucide-react';
+import { Bell, Church, ClipboardList, HandHeart, HeartHandshake, LayoutDashboard, Music, Network, NotebookPen, QrCode, Settings, ShieldCheck, UsersRound, UserRoundCog } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
@@ -18,6 +18,7 @@ const ICONS = {
   ministries: Church,
   users: UserRoundCog,
   settings: Settings,
+  qr: QrCode,
   notifications: Bell,
   account: ShieldCheck,
 } as const;

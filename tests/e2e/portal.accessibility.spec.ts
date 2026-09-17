@@ -23,6 +23,8 @@ const PAGES: [string, string][] = [
   ['/app/admin/users', 'Users & Permissions'],
   ['/app/admin/settings', 'Settings'],
   ['/app/admin/health', 'System health'],
+  ['/app/admin/qr', 'QR codes'],
+  ['/app/admin/qr/general?layout=poster', 'Daily Journal poster'],
 ];
 
 test('the main portal pages have no WCAG 2.2 AA violations', async ({ page }) => {

@@ -16,6 +16,7 @@ import { grantableRolesForPerson } from '@/server/modules/iam/users.service';
 import { canAccessPerson, hasGlobal, hasPermission } from '@/server/policy/can';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
+import { AcceptsMembersToggle } from './accepts-members-toggle';
 import { activityActor, activityLabel, fieldLabel } from './activity-labels';
 import { MinistryMembershipForm } from './ministry-membership-form';
 import { PauseManager } from './pause-manager';
@@ -205,7 +206,15 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
                   </div>
                   <div>
                     <dt className="text-muted">Shown in leader selector</dt>
-                    <dd className="font-medium">{leadership.acceptsMembers ? 'Yes' : 'No'}</dd>
+                    <dd className="font-medium">
+                      {can.move ? (
+                        <AcceptsMembersToggle personId={person.id} firstName={person.firstName} acceptsMembers={leadership.acceptsMembers} />
+                      ) : leadership.acceptsMembers ? (
+                        'Yes'
+                      ) : (
+                        'No'
+                      )}
+                    </dd>
                   </div>
                 </dl>
                 {leadership.group.length === 0 ? (

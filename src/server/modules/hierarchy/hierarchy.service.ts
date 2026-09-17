@@ -272,7 +272,7 @@ export function removeFromHierarchy(db: Database, ctx: RequestContext, raw: unkn
 
 export const AcceptsMembersInput = z.object({ personId: uuid, acceptsMembers: z.boolean() });
 
-export function setAcceptsMembers(db: Database, ctx: RequestContext, raw: unknown) {
+export async function setAcceptsMembers(db: Database, ctx: RequestContext, raw: unknown) {
   const input = parseInput(AcceptsMembersInput, raw);
   assertPermission(ctx, 'hierarchy.manage');
   return db.transaction(async (tx) => {

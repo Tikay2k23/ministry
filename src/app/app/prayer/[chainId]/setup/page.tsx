@@ -1,5 +1,6 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Printer } from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import QRCode from 'qrcode';
 import { z } from 'zod';
@@ -190,6 +191,11 @@ export default async function ChainSetupPage({ params }: { params: Promise<{ cha
                 <a href={detail.publicUrl} target="_blank" rel="noopener noreferrer">
                   <ExternalLink aria-hidden className="size-4" /> Open the public page
                 </a>
+              </Button>
+              <Button asChild variant="secondary" size="sm">
+                <Link href={`/app/prayer/${chain.id}/qr?layout=poster`}>
+                  <Printer aria-hidden className="size-4" /> Print a poster
+                </Link>
               </Button>
             </div>
           </SectionCard>

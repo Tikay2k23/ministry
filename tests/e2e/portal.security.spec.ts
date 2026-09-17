@@ -106,7 +106,7 @@ test('the portal runs without policy violations, shows markup in names as text, 
   await expect(page.getByText(payload).first()).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
 
-  for (const path of ['/app', '/app/devotional', '/app/prayer', '/app/journal', '/app/reports', '/app/ministries', '/app/admin/settings']) {
+  for (const path of ['/app', '/app/devotional', '/app/prayer', '/app/journal', '/app/reports', '/app/ministries', '/app/admin/settings', '/app/admin/qr/general?layout=tent']) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   }

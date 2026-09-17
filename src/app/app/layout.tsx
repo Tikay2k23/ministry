@@ -41,7 +41,7 @@ export default async function PortalLayout({ children }: { children: React.React
         </div>
       </aside>
       <div className="min-w-0">
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1200px] px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-10">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1200px] px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-10 print:max-w-none print:p-0">
           {children}
         </main>
         <div className="border-t border-line px-4 py-4 print:hidden lg:hidden">

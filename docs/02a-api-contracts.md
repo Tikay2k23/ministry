@@ -299,7 +299,28 @@ Every mutation writes an `audit_logs` row in the same transaction. Operations ma
   - **Stalled scheduler:** it is reported stalled when no job has started for 15 minutes, with advice for the scheduler mode.
   - **"Run now":** `runJobSoon({ jobKey })` makes the job due at the next tick (within a minute) and is audited as `system.job_run_requested`.
 - **`audit.forEntity`:** the person profile's Activity list shows the last 20 entries in plain words: who did it, when, and for profile edits the names of the changed fields. Old and new values never leave the server. Access-log entries are recorded against entries and reports, never people, so they don't appear. The global audit viewer (A28) is still V1.
-- **Not built yet:** publishing a new privacy notice from the portal (the approved text replaces the draft in `src/app/(public)/privacy/page.tsx`, and `privacy.noticeVersion` records the version), the retention, prayer-default and notification settings, and QR code management (A27, part 5.4).
+- **Not built yet:** publishing a new privacy notice from the portal (the approved text replaces the draft in `src/app/(public)/privacy/page.tsx`, and `privacy.noticeVersion` records the version), and the retention, prayer-default and notification settings.
+
+**Implementation note (M5.4, 2026-09-17).** QR codes (A27), for the office to print. Services in `src/server/modules/public/qr-codes.service.ts` over the entry codes built in M2; print layouts in `src/components/qr/`. No migration and no new environment variable: codes, scan counts and the QR renderer already existed.
+
+| Page | Operations |
+|---|---|
+| `/app/admin/qr` | `listQrCodes`: the general code, the leaders shown in the leader selector grouped by branch, and the prayer chains — each with its scans and last scan. Needs a global `links.manage` |
+| `/app/admin/qr/branch?personId=` | `branchQrCards`: a wallet card for every leader in that branch who is shown in the leader selector, four to an A4 page |
+| `/app/admin/qr/general?layout=` | `getGeneralQrCode`, as a card, a table tent or a poster |
+| `/app/people/{id}/qr?layout=` | One leader's card, and "Replace code" (`entryCodes.rotate`). `links.manage`, or the leader themselves with `links.own.manage` |
+| `/app/prayer/{chainId}/qr?layout=` | A chain's public page as a poster, for anyone who can open that chain (docs/06 row 32: coordinators within their own chains) |
+
+- **Differences from docs/04 A27:**
+  - One page with sections rather than tabs, and the leaders grouped by branch in collapsible sections, because the ministry has about 160 of them. The route is `/app/admin/qr` (the IA sketch said `/app/admin/links`), in the Admin part of the navigation.
+  - No SVG/PNG download. Each layout is a print page, so the browser's own "Save as PDF" produces a file; the bulk "Generate leader QR cards" is the branch sheet, printed from HTML instead of a generated PDF (A27 expected that in V1).
+  - The code string isn't listed; it is printed under each QR code as the link people can type.
+  - A leader replaces their own code from their profile's QR page, not from *My account*.
+  - The general code can't be rotated from the portal: it grants nothing, and replacing it would retire every printed poster at once.
+- **Which leaders are listed:** only those shown in the public leader selector (`accepts_members`), because a leader's code preselects them for a new person only when that is on. Branches are the Primary Leaders' nodes; anyone above them is grouped as "Above the branches".
+- **Codes are created when first printed** (`ensureLeaderEntryCode`), never by listing, so "Not printed" means no code exists yet. A chain's code is created when its page is first opened in the portal.
+- **Scans** are `entry_codes.scan_count` and `last_scanned_at`, written when a public page resolves a code. Read through raw SQL they come back as strings, so the service converts them to dates.
+- **`hierarchy.setAcceptsMembers`** takes `{ personId, acceptsMembers }` (docs/02a §3.3 sketched `value`). It now has a switch on the person's profile, under their group ("Shown in leader selector"), for anyone with `hierarchy.manage` over them, audited as `hierarchy.accepts_members_changed`. Until now it could only be set when adding a person or importing, which left FR-LDR-08 unreachable for people already in the directory.
 
 ---
 
