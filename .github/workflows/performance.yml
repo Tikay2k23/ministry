@@ -33,6 +33,16 @@ concurrency:
   group: performance-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Placeholder settings, as in ci.yml. No real secrets: this job only ever touches its own
+  # throwaway database. The app refuses to start without them, which is the point.
+  APP_URL: http://localhost:3000
+  BETTER_AUTH_URL: http://localhost:3000
+  BETTER_AUTH_SECRET: ci-only-secret-not-used-anywhere-else-0000
+  EMAIL_PROVIDER: console
+  SCHEDULER_MODE: 'off'
+  NEXT_TELEMETRY_DISABLED: '1'
+
 jobs:
   plans:
     name: Query plans at 50k people
