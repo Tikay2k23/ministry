@@ -26,6 +26,11 @@ export interface DatabaseHandle {
   close(): Promise<void>;
 }
 
+export interface OpenDatabaseOptions {
+  /** Called with every statement Drizzle runs. Used by the query-plan check, not by the app. */
+  onQuery?: (query: string, params: unknown[]) => void;
+}
+
 /** PostgreSQL extensions the schema requires (see drizzle/0000_extensions.sql). */
 const PGLITE_EXTENSIONS = { citext, pg_trgm, unaccent, btree_gist, btree_gin };
 
@@ -35,10 +40,13 @@ const PGLITE_EXTENSIONS = { citext, pg_trgm, unaccent, btree_gist, btree_gin };
  * - `pglite://<dir>` → embedded PostgreSQL persisted to <dir> (local development)
  * - `pglite://memory` → in-memory embedded PostgreSQL (tests)
  */
-export function openDatabase(url: string): DatabaseHandle {
+export function openDatabase(url: string, options: OpenDatabaseOptions = {}): DatabaseHandle {
+  // Drizzle calls this for every statement it runs; `npm run db:explain` uses it to collect the
+  // app's real SQL and then EXPLAIN it. Nothing in the app passes a logger.
+  const logger = options.onQuery ? { logQuery: options.onQuery } : undefined;
   if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
     const pool = new pg.Pool({ connectionString: url, max: 10 });
-    const db = drizzleNodePg(pool, { schema }) as unknown as Database;
+    const db = drizzleNodePg(pool, { schema, logger }) as unknown as Database;
     return { db, kind: 'postgres', close: () => pool.end() };
   }
   if (url.startsWith('pglite:')) {
@@ -50,7 +58,7 @@ export function openDatabase(url: string): DatabaseHandle {
       dataDir: inMemory ? undefined : location,
       extensions: PGLITE_EXTENSIONS,
     });
-    const db = drizzlePglite(client, { schema }) as unknown as Database;
+    const db = drizzlePglite(client, { schema, logger }) as unknown as Database;
     return { db, kind: 'pglite', close: () => client.close() };
   }
   throw new Error('DATABASE_URL must start with postgres://, postgresql:// or pglite:');

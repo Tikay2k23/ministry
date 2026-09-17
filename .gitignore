@@ -32,3 +32,7 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 .idea/
+
+# Load testing: device keys let their holder journal as those people; plans are run output.
+load/keys.json
+explain-plans.json

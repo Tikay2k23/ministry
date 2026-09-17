@@ -1,0 +1,86 @@
+name: Performance
+
+# Query plans are checked on a schedule and on demand rather than on every push: seeding 50,000
+# people takes a few minutes, and plans change when the schema or the queries change, not when a
+# page's wording does. The k6 load tests need a deployed environment, so they are a manual step
+# (docs/runbooks/performance.md).
+on:
+  schedule:
+    - cron: '17 19 * * 0' # Sunday, 03:17 Manila
+  push:
+    branches: [main]
+    # The things that change a query plan: the schema, the queries, the indexes, this job.
+    paths:
+      - 'drizzle/**'
+      - 'src/server/db/**'
+      - 'src/server/modules/**/*.queries.ts'
+      - 'src/server/modules/**/*.service.ts'
+      - 'src/server/policy/**'
+      - '.github/workflows/performance.yml'
+  workflow_dispatch:
+    inputs:
+      people:
+        description: 'How many people to seed'
+        default: '50000'
+      days:
+        description: 'How many days of ledger'
+        default: '30'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plans:
+    name: Query plans at 50k people
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gentouch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/gentouch
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: gentouch
+      SEED_ADMIN_EMAIL: admin@example.org
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: Build the schema and reference data
+        run: npm run db:migrate && npm run db:seed
+
+      - name: Seed a load-sized ministry
+        run: npm run db:seed:load -- --allow-postgres --people=${{ inputs.people || '50000' }} --days=${{ inputs.days || '30' }} --entry-days=7
+
+      - name: Check it is whole
+        run: npm run db:check
+
+      - name: Query plans for the hottest pages
+        run: npm run db:explain
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: explain-plans
+          path: explain-plans.json
+          retention-days: 30

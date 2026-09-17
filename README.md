@@ -4,7 +4,7 @@ Ministry management and accountability system for **Generation Touch Harvest Int
 leadership hierarchy, daily journal, prayer chain and morning devotional.
 
 - Product & architecture blueprint: [docs/README.md](docs/README.md)
-- Progress: **M0 · Foundation**, **M1 · People & Hierarchy**, **M2 · Daily Journal**, the **stack alignment**, **M3 · Prayer Chain** and **M4 · Devotional / Worship** ✅. **M5 · Hardening & Pilot** is in progress: security, admin & operations, accessibility and the pilot materials are done; performance, deployment and recovery remain (see [docs/07-roadmap.md](docs/07-roadmap.md))
+- Progress: **M0–M5 complete** (foundation, people & hierarchy, daily journal, prayer chain, devotional/worship, and hardening: security, admin & operations, accessibility, pilot materials, performance, deployment & recovery). Next: the pilot itself (see [docs/07-roadmap.md](docs/07-roadmap.md) and [docs/pilot/pilot-plan.md](docs/pilot/pilot-plan.md))
 
 ## Stack
 
@@ -54,6 +54,10 @@ management and settings stay locked until you do.
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:seed` | Idempotent reference data + first Super Admin |
 | `npm run db:seed:demo` | **Demo data only**: a fictional 1,885-person ministry (pastor → 12 → 144 → 1,728) with ministries and teams. Refuses to run in production |
+| `npm run db:check` | Seven integrity checks on a database (migrations, reference data, the closure table against a recursive query, orphans, journals without their day). Read-only: safe against production, and the first thing to run after a restore |
+| `npm run smoke -- <url>` | 32 checks against a deployed app: security headers, a fresh nonce per page, the portal turning strangers away, token pages, cron auth, CSRF, robots |
+| `npm run db:seed:load` | **Load-test data only**: 50,000 people with a ledger, for query plans and k6. Refuses to run in production or against a database that already holds a ministry |
+| `npm run db:explain` | Query plans and timings for the hottest pages, from the app’s own SQL. Fails on a missing index or a page over budget (see docs/runbooks/performance.md) |
 
 ### Demo accounts (after `npm run db:seed:demo`)
 
@@ -91,8 +95,10 @@ Not done yet, but prepared and written up: **[docs/runbooks/deployment.md](docs/
 ```
 .github/workflows/        CI: type-check, lint, tests and build; migrations on PostgreSQL; end-to-end tests
 deploy/                   Supabase Cron setup
-docs/                     Blueprint (phases 1–7), the accessibility checklist and docs/pilot/
+load/                     k6 load tests (run by hand against staging)
+docs/                     Blueprint (phases 1–7), the accessibility checklist, docs/pilot/ and docs/runbooks/
 drizzle/                  SQL migrations (generated + hand-written)
+scripts/                  smoke.mjs: checks a deployed app from the outside
 src/app/                  Routes: sign-in, portal (/app), public journal (/j, /k, /privacy), API
 src/components/           UI primitives (shadcn/ui-based), forms, data table, portal shell, journal status, brand
 src/server/db/            Schema, client, migrations runner, seeds
