@@ -4,7 +4,7 @@ Ministry management and accountability system for **Generation Touch Harvest Int
 leadership hierarchy, daily journal, prayer chain and morning devotional.
 
 - Product & architecture blueprint: [docs/README.md](docs/README.md)
-- Progress: **M0 · Foundation** ✅, **M1 · People & Hierarchy** ✅, **M2 · Daily Journal** ✅ and the **stack alignment** ✅. **M3 · Prayer Chain** is in progress (see [docs/07-roadmap.md](docs/07-roadmap.md))
+- Progress: **M0 · Foundation**, **M1 · People & Hierarchy**, **M2 · Daily Journal**, the **stack alignment**, **M3 · Prayer Chain** and **M4 · Devotional / Worship** ✅. **M5 · Hardening & Pilot** is in progress: security, admin & operations, accessibility and the pilot materials are done; performance, deployment and recovery remain (see [docs/07-roadmap.md](docs/07-roadmap.md))
 
 ## Stack
 
@@ -91,7 +91,7 @@ Not done yet. The code is prepared for it; these are the steps, in order.
 ```
 .github/workflows/        CI: type-check, lint, tests and build; migrations on PostgreSQL; end-to-end tests
 deploy/                   Supabase Cron setup
-docs/                     Blueprint (phases 1–7)
+docs/                     Blueprint (phases 1–7), the accessibility checklist and docs/pilot/
 drizzle/                  SQL migrations (generated + hand-written)
 src/app/                  Routes: sign-in, portal (/app), public journal (/j, /k, /privacy), API
 src/components/           UI primitives (shadcn/ui-based), forms, data table, portal shell, journal status, brand

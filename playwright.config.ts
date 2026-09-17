@@ -14,7 +14,9 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   timeout: 90_000,
   expect: { timeout: 20_000 },
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // In CI the 'github' reporter turns each failure into an annotation on the run, which is readable
+  // without downloading the log or the HTML report.
+  reporter: process.env.CI ? [['github'], ['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: E2E_BASE_URL,
     trace: 'retain-on-failure',
