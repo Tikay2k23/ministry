@@ -4,6 +4,7 @@ import type { RequestContext } from '@/server/context/request-context';
 import type { DatabaseHandle } from '@/server/db/client';
 import { auditLogs } from '@/server/db/schema';
 import { seedReferenceData } from '@/server/db/seed/reference-data';
+import { getEnv } from '@/server/env';
 import { JOBS } from '@/server/modules/scheduler/jobs';
 import { runDueJobs } from '@/server/modules/scheduler/scheduler.service';
 import { getSystemHealth, runJobSoon } from '@/server/modules/settings/health.service';
@@ -99,7 +100,9 @@ describe('system health', () => {
     expect(soon.databaseBytes).toBeGreaterThan(0);
 
     const later = await getSystemHealth(handle.db, { ...admin, now: new Date(now.getTime() + 60 * 60_000) });
-    expect(later.scheduler.stalled).toBe(true);
+    // CI's verify job deliberately sets SCHEDULER_MODE=off (.github/workflows/ci.yml): "stalled" only
+    // means something when jobs are meant to be running, so it should stay false there by design.
+    expect(later.scheduler.stalled).toBe(getEnv().SCHEDULER_MODE !== 'off');
   });
 
   it('runs a job at the next tick when asked, for administrators only', async () => {
