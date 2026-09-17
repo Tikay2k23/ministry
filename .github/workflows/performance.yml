@@ -66,17 +66,29 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # Each step reports its own last lines as an annotation: job logs need authentication to read,
+      # so without this a failure here says only "exit code 1".
       - name: Build the schema and reference data
-        run: npm run db:migrate && npm run db:seed
+        run: |
+          set -o pipefail
+          npm run db:migrate 2>&1 | tee step.log || { echo "::error title=db:migrate::$(tail -20 step.log | tr '\n' ' ' | cut -c1-900)"; exit 1; }
+          npm run db:seed 2>&1 | tee step.log || { echo "::error title=db:seed::$(tail -20 step.log | tr '\n' ' ' | cut -c1-900)"; exit 1; }
 
       - name: Seed a load-sized ministry
-        run: npm run db:seed:load -- --allow-postgres --people=${{ inputs.people || '50000' }} --days=${{ inputs.days || '30' }} --entry-days=7
+        run: |
+          set -o pipefail
+          npm run db:seed:load -- --allow-postgres --people=${{ inputs.people || '50000' }} --days=${{ inputs.days || '30' }} --entry-days=7 2>&1 | tee step.log \
+            || { echo "::error title=db:seed:load::$(tail -20 step.log | tr '\n' ' ' | cut -c1-900)"; exit 1; }
 
       - name: Check it is whole
-        run: npm run db:check
+        run: |
+          set -o pipefail
+          npm run db:check 2>&1 | tee step.log || { echo "::error title=db:check::$(tail -20 step.log | tr '\n' ' ' | cut -c1-900)"; exit 1; }
 
       - name: Query plans for the hottest pages
-        run: npm run db:explain
+        run: |
+          set -o pipefail
+          npm run db:explain 2>&1 | tee step.log || { echo "::error title=db:explain::$(tail -30 step.log | tr '\n' ' ' | cut -c1-900)"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         if: always()
