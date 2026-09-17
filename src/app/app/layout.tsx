@@ -24,7 +24,7 @@ export default async function PortalLayout({ children }: { children: React.React
       <aside className="border-b border-line bg-surface print:hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between px-5 py-4 lg:py-6">
           <Link href="/app" aria-label="GenTouch dashboard">
-            <BrandMark />
+            <BrandMark size={52} />
           </Link>
         </div>
         <div className="overflow-x-auto px-3 pb-3 lg:flex-1 lg:overflow-y-auto">

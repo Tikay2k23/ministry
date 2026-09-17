@@ -45,7 +45,7 @@ const shortUrl = (url: string) => url.replace(/^https?:\/\//, '');
 export function QrCard({ face, className }: { face: QrFace; className?: string }) {
   return (
     <article className={cn('rounded-2xl border-2 border-brand-deep bg-white p-6 text-center break-inside-avoid print:border', className)}>
-      <BrandMark withTagline className="mb-4" />
+      <BrandMark withTagline size={76} className="mb-4" />
       <h2 className="font-display text-2xl font-extrabold">{face.title}</h2>
       {face.subtitle && <p className="text-muted">{face.subtitle}</p>}
       <QrImage svg={face.svg} className="my-5 w-52" />
@@ -58,7 +58,7 @@ export function QrCard({ face, className }: { face: QrFace; className?: string }
 function TentPanel({ face, upsideDown }: { face: QrFace; upsideDown?: boolean }) {
   return (
     <div className={cn('flex h-[128mm] flex-col items-center justify-center gap-3 px-8 text-center', upsideDown && 'rotate-180')}>
-      <BrandMark withTagline />
+      <BrandMark withTagline size={88} />
       <h2 className="font-display text-3xl font-extrabold">{face.title}</h2>
       {face.subtitle && <p className="text-lg text-muted">{face.subtitle}</p>}
       <QrImage svg={face.svg} className="w-[62mm]" />
@@ -83,7 +83,7 @@ export function QrPrintSheet({ layout, face }: { layout: QrLayout; face: QrFace 
   if (layout === 'poster') {
     return (
       <article className="mx-auto flex min-h-[260mm] w-full max-w-[190mm] flex-col items-center justify-center gap-6 rounded-2xl border-2 border-brand-deep bg-white p-10 text-center print:rounded-none print:border-0">
-        <BrandMark withTagline className="scale-150" />
+        <BrandMark withTagline size={190} />
         <h2 className="font-display mt-6 text-5xl font-extrabold">{face.title}</h2>
         {face.subtitle && <p className="text-2xl text-muted">{face.subtitle}</p>}
         <QrImage svg={face.svg} className="my-4 w-[120mm]" />

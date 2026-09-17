@@ -43,6 +43,10 @@ The logo tells the story this system supports: a **sprouting G** (growth, genera
 
 **Rules:** the logo keeps its original glossy style, but the **UI around it stays flat** (no gradients or bevels), so the logo is the single rich element on screen. Never recolour, stretch, or place the logo on busy backgrounds. Keep clear space of at least one leaf's height around it.
 
+**Implementation note (2026-09-18).** The ministry supplied the full logo, so `BrandMark` is no longer a text placeholder: `public/brand/gentouch-logo.png`, the original artwork at 1254 px square on a transparent background. `src/components/brand/brand-mark.tsx` renders it through `next/image` at a `size` in pixels (the rendered height), asking for four times that many pixels so it stays sharp in print: 44 px in the public header, 52 px in the portal sidebar, 168 px on the sign-in page, and 76 / 88 / 190 px on the wallet card, the table tent and the poster. `withTagline` repeats the tagline as text underneath, because the tagline drawn along the G only becomes readable at poster size; the image itself is named just "GenTouch", so a screen reader hears each once. `src/app/icon.png` (512 px) and `apple-icon.png` (180 px, on white) are generated from the same file for the browser tab and the phone home screen.
+
+**Still to be produced by a designer**, and the reason the table above asks for them: a **mark-only** variant for the sidebar and compact header, and a **simplified flat** variant for the icons. Neither can be cut from the supplied artwork — the wordmark arcs across the top of the G and the tagline runs along its stroke, so both are part of the drawing. Until then the full logo is used everywhere, which means that below roughly 120 px the wordmark and tagline are decorative rather than readable. A **vector original** (SVG, AI, EPS or vector PDF) is also still wanted for large-format printing.
+
 **Colour tokens** (values approximated from the supplied image; replace with the designer's exact values when the original files arrive):
 
 | Token | Value | Role | Contrast |
