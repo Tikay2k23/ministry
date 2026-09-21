@@ -187,6 +187,18 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+      # This job has been killed mid-run twice (exit 143, SIGTERM) with every test passing locally.
+      # A runner holds Chromium, `next dev` and an embedded PostgreSQL at once, so running out of
+      # memory is the likely cause; these lines say so plainly instead of leaving "exit code 143".
+      - name: Why did it stop?
+        if: failure()
+        run: |
+          echo "::notice title=E2E memory::$(free -m | sed -n 2p)"
+          echo "::notice title=E2E disk::$(df -h / | sed -n 2p)"
+          killed="$(sudo dmesg 2>/dev/null | grep -i 'killed process' | tail -3)"
+          if [ -n "$killed" ]; then echo "::error title=E2E killed by the kernel::$killed"; fi
+
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
