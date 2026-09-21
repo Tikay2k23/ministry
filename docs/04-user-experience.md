@@ -394,11 +394,17 @@ Ministry Today · Saturday, September 12                          Scope: All min
 - **Empty:** "No pending requests."
 
 #### A11 · Journal: Today
-- **Purpose:** Daily view of submissions in scope (4.3 for leaders; with scope switcher for branch/ministry).
-- **Components:** Summary line and bar; status filter chips (All · Not yet · Received · Late · Awaiting review · Follow-up · Excused); table with 7-day dots; "New — please confirm" strip; date picker (past days read-only).
+- **Purpose:** Daily view of submissions in scope, arranged the way the ministry is: all of it, then one Primary Leader, then one of their leaders, then a person (4.3 for leaders).
+- **Components:**
+  - **Breadcrumb** — All ministry › Primary Leader › Direct Leader, each step a link back out; a leader who cannot see the whole ministry reads "Everyone you can see" instead.
+  - **Primary Leader cards** — one per branch with anyone on that day, showing received of expected and what is still out. Counted from the branch the ledger recorded for the day, so a past day stays right after someone moves (docs/03 §4.7). Shown when there is more than one branch to choose between.
+  - **Filters** — day, Primary Leader, Direct Leader (the leaders inside the chosen branch), role, ministry, status, and a name search. Inline above the table on a tablet and up; behind one **Filters** button, in a sheet, on a phone.
+  - **Summary cards** — Received (with late), Not yet, No journal, Excused, each with its share of the people expected; clicking one filters the table.
+  - **Chips** — Everyone · Received late · Needs review · With a photo, each with its own count over the same filtered people.
+  - **Table** — name, role, ministry, the day's status and time, the leader of the day, whether a photo came with it, seven-day dots, and an action. Sortable by name, status, leader or when it arrived; 25, 50 or 100 rows a page. On a phone the same rows become cards.
 - **Actions:** Open entry, review, excuse, proxy submit, message (tel:/sms: links).
-- **Permissions:** `journal.status.view`; entry links only when content-permitted.
-- **Empty:** "No one in your group is expected to journal today" (rest day → "Today is a rest day").
+- **Permissions:** `journal.status.view` decides who is counted at all; a mobile number is only searchable by someone with `people.contact.view` for that person; the photo column and chip say only that a photo came with the journal, which is part of the day’s status — the photo itself is behind `journal.proof.view` and is only ever fetched when the entry is opened (docs/02 §4). Every filter, the sort and the page are applied in the database, so the page never holds people the reader may not see.
+- **Empty:** "No one in your group is expected to journal today" (rest day → "Today is a rest day"); with filters on, "No one matches these filters" and a way to clear them.
 
 #### A12 · Review queue
 - **Purpose:** Fast, respectful reading, one entry at a time.
