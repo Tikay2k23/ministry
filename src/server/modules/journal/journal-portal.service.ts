@@ -46,12 +46,20 @@ async function ministryToday(db: Database, now: Date) {
   return { timezone, defaultCountry, today: localDate(now, timezone) };
 }
 
-async function leadsAnyone(db: Database, personId: string) {
-  const [row] = await queryRows<{ leads: boolean }>(
+/**
+ * Whether someone leads anyone, and whether the people they lead lead others in turn. The second
+ * answer decides what they are shown first: someone whose members are themselves leaders is
+ * accountable for the whole branch, not only for the handful who report to them directly.
+ */
+async function leadershipOf(db: Database, personId: string) {
+  const [row] = await queryRows<{ leads: boolean; leads_leaders: boolean }>(
     db,
-    sql`SELECT EXISTS (SELECT 1 FROM hierarchy_nodes WHERE parent_person_id = ${personId}::uuid) AS leads`,
+    sql`SELECT EXISTS (SELECT 1 FROM hierarchy_nodes n WHERE n.parent_person_id = ${personId}::uuid) AS leads,
+               EXISTS (SELECT 1 FROM hierarchy_nodes n
+                        WHERE n.parent_person_id = ${personId}::uuid
+                          AND EXISTS (SELECT 1 FROM hierarchy_nodes c WHERE c.parent_person_id = n.person_id)) AS leads_leaders`,
   );
-  return row?.leads === true;
+  return { leads: row?.leads === true, leadsLeaders: row?.leads_leaders === true };
 }
 
 // ─── Today / any day overview ─────────────────────────────────────────────────
@@ -185,17 +193,25 @@ export async function getJournalOverview(db: Database, ctx: RequestContext, raw:
   const selfId = ctx.actor.kind === 'user' ? ctx.actor.personId : null;
 
   let leaderId: string | null = null;
+  let leadsLeaders = false;
   if (input.view !== 'all') {
     if (input.leaderId) {
       await assertCanAccessPerson(db, ctx, 'journal.status.view', input.leaderId);
       leaderId = input.leaderId;
+      leadsLeaders = (await leadershipOf(db, leaderId)).leadsLeaders;
       // Opening a Primary Leader's card means "show me this branch", so a leader who lands on
       // their own group by default steps up to the branch rather than staying inside it.
-    } else if (!input.primaryLeaderId && selfId && (await leadsAnyone(db, selfId)) && (await canAccessPerson(db, ctx, 'journal.status.view', selfId))) {
-      leaderId = selfId;
+    } else if (!input.primaryLeaderId && selfId && (await canAccessPerson(db, ctx, 'journal.status.view', selfId))) {
+      const own = await leadershipOf(db, selfId);
+      if (own.leads) {
+        leaderId = selfId;
+        leadsLeaders = own.leadsLeaders;
+      }
     }
   }
-  const view: JournalView = !leaderId ? 'all' : input.view === 'branch' ? 'branch' : 'direct';
+  // Someone who leads leaders opens on their whole branch; everyone else on the group in front of
+  // them. Either can be asked for by name, and the page keeps saying which one it is showing.
+  const view: JournalView = !leaderId ? 'all' : input.view ?? (leadsLeaders ? 'branch' : 'direct');
 
   // One card per Primary Leader, for the overview at the top of the page. The ledger's own branch
   // snapshot means this is a single grouped read, whatever the size of the ministry, and it stays

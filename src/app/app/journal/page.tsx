@@ -101,7 +101,7 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
     date: isToday ? undefined : overview.date,
     primaryLeaderId: overview.primaryLeader?.id,
     leaderId: overview.leader?.id,
-    view: overview.view === 'branch' ? 'branch' : undefined,
+    view: overview.leader ? overview.view : undefined,
     ministryId: overview.ministryId ?? undefined,
     role: overview.role === 'all' ? undefined : overview.role,
     q: overview.q ?? undefined,
@@ -112,10 +112,12 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
   const href = (over: Record<string, string | number | undefined>) =>
     buildHref('/app/journal', { ...base, ...over, page: undefined });
 
+  // What the reader chose, not what the page worked out for them: a leader who simply opened the
+  // page has not filtered anything, so there is nothing to reset.
   const activeCount = [
     base.date,
     base.primaryLeaderId,
-    base.leaderId,
+    input.leaderId,
     base.ministryId,
     base.role,
     base.q,
@@ -233,14 +235,19 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
           <>
             <ChevronRight aria-hidden className="size-4 text-muted" />
             <span className="font-medium">
-              {overview.leader.isSelf ? 'Your group' : overview.leader.name}
-              {overview.view === 'branch' && ' — whole branch'}
+              {overview.view === 'branch'
+                ? `${overview.leader.isSelf ? 'Your' : `${overview.leader.name}’s`} whole branch`
+                : overview.leader.isSelf
+                  ? 'Your group'
+                  : overview.leader.name}
             </span>
             <Link
-              href={href({ view: overview.view === 'branch' ? undefined : 'branch' })}
+              href={href({ view: overview.view === 'branch' ? 'direct' : 'branch' })}
               className="ml-2 text-brand-deep hover:underline"
             >
-              {overview.view === 'branch' ? 'just their group' : 'whole branch'}
+              {overview.view === 'branch'
+                ? `just ${overview.leader.isSelf ? 'your' : 'their'} group`
+                : `${overview.leader.isSelf ? 'your' : 'their'} whole branch`}
             </Link>
           </>
         )}
@@ -299,9 +306,12 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
         status={overview.status}
         q={overview.q ?? ''}
         sort={overview.sort}
-        view={overview.view === 'branch' ? 'branch' : ''}
+        view={overview.leader ? overview.view : ''}
         branches={overview.branches.map((b) => ({ value: b.primaryLeaderId, label: b.name }))}
-        branchLeaders={overview.branchLeaders.map((l) => ({ value: l.id, label: l.name }))}
+        branchLeaders={(overview.branchLeaders.length
+          ? overview.branchLeaders
+          : overview.groups.map((g) => ({ id: g.leaderId, name: g.leaderName }))
+        ).map((l) => ({ value: l.id, label: l.name }))}
         ministries={ministries.map((m) => ({ value: m.id, label: m.name }))}
         roles={(Object.keys(ROLE_LABEL) as JournalRoleFilter[]).map((r) => ({
           value: r,

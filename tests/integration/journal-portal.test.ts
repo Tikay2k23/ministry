@@ -36,7 +36,7 @@ import {
 import { addMinistryMember, createMinistry } from '@/server/modules/ministries/ministries.service';
 import { getSetting, updateSetting } from '@/server/modules/settings/settings.service';
 import { createTestDatabase } from '../helpers/db';
-import { globalGrant, userContext } from '../helpers/fixtures';
+import { branchGrant, globalGrant, userContext } from '../helpers/fixtures';
 import { buildWorld } from '../helpers/world';
 
 const TODAY = '2026-09-15';
@@ -243,6 +243,26 @@ describe('the daily journal dashboard', () => {
 
     // A size nobody offered falls back to the default rather than reading the whole ministry.
     expect((await getJournalOverview(db, office(), { pageSize: 5000 })).pageSize).toBe(25);
+  });
+
+  it('opens a leader of leaders on their branch, and everyone else on the group in front of them', async () => {
+    // Michael leads Mark, who leads John: his own day is the branch, not the one person under him.
+    const michael = userContext(
+      { id: world.admin.actor.kind === 'user' ? world.admin.actor.userId : '', personId: world.ids.michael },
+      [branchGrant('journal.status.view', world.ids.michael)],
+      at('10:00'),
+    );
+    const branch = await getJournalOverview(db, michael, {});
+    expect(branch.view).toBe('branch');
+    expect(branch.people.map((r) => r.personId).sort()).toEqual([world.ids.john, world.ids.mark].sort());
+    expect(branch.groups.map((g) => [g.leaderName, g.expected, g.received])).toEqual([['Mark Santos', 1, 1]]);
+
+    // Asking for the narrow view still gives it: Michael leads only Mark directly.
+    const direct = await getJournalOverview(db, michael, { view: 'direct' });
+    expect(direct.people.map((r) => r.personId)).toEqual([world.ids.mark]);
+
+    // Mark leads no leaders, so his own page stays the group in front of him.
+    expect((await getJournalOverview(db, mark(), {})).view).toBe('direct');
   });
 
   it('keeps a leader inside their own branch, whatever the filters ask for', async () => {
