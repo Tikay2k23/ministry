@@ -343,21 +343,32 @@ export async function getJournalOverview(db: Database, ctx: RequestContext, raw:
   const weekDates = Array.from({ length: 7 }, (_, i) => addDays(from, i));
 
   // Groups led by the leader's direct members (one level down), counted over their whole branch.
+  //
+  // The day already records each person's path from the root down to their leader, so the branch
+  // is read once — from the day's own path, not from today's tree, so a past day still shows the
+  // groups as they were — and each row is filed under whoever comes straight after this leader in
+  // it. The shape it replaced asked the same question once per sub-leader, which at 50,000 people
+  // meant half a million repeats of the scope check and fifteen seconds of waiting.
   const groups = leaderId
     ? await queryRows<{ id: string; first_name: string; last_name: string; preferred_name: string | null; expected: number; received: number; not_yet: number; missed: number }>(
         db,
-        sql`SELECT n.person_id AS id, p.first_name, p.last_name, p.preferred_name,
-                   count(d.person_id) FILTER (WHERE d.is_expected)::int AS expected,
-                   count(d.person_id) FILTER (WHERE d.submission_status IN ('submitted', 'late'))::int AS received,
-                   count(d.person_id) FILTER (WHERE d.submission_status = 'pending')::int AS not_yet,
-                   count(d.person_id) FILTER (WHERE d.submission_status = 'missed')::int AS missed
+        sql`WITH branch AS MATERIALIZED (
+              SELECT d.hierarchy_path[array_position(d.hierarchy_path, ${leaderId}::uuid) + 1] AS leader_id,
+                     d.is_expected, d.submission_status
+                FROM journal_days d
+               WHERE d.journal_date = ${date}::date
+                 AND d.hierarchy_path @> ARRAY[${leaderId}]::uuid[]
+                 AND (d.is_expected OR d.entry_id IS NOT NULL)
+                 AND ${personScopeFilter(ctx, 'journal.status.view', sql`d.person_id`)}
+            )
+            SELECT n.person_id AS id, p.first_name, p.last_name, p.preferred_name,
+                   count(b.leader_id) FILTER (WHERE b.is_expected)::int AS expected,
+                   count(b.leader_id) FILTER (WHERE b.submission_status IN ('submitted', 'late'))::int AS received,
+                   count(b.leader_id) FILTER (WHERE b.submission_status = 'pending')::int AS not_yet,
+                   count(b.leader_id) FILTER (WHERE b.submission_status = 'missed')::int AS missed
               FROM hierarchy_nodes n
               JOIN people p ON p.id = n.person_id
-              LEFT JOIN journal_days d
-                ON d.journal_date = ${date}::date
-               AND d.hierarchy_path @> ARRAY[n.person_id]
-               AND (d.is_expected OR d.entry_id IS NOT NULL)
-               AND ${personScopeFilter(ctx, 'journal.status.view', sql`d.person_id`)}
+              LEFT JOIN branch b ON b.leader_id = n.person_id
              WHERE n.parent_person_id = ${leaderId}::uuid
                AND EXISTS (SELECT 1 FROM hierarchy_nodes c WHERE c.parent_person_id = n.person_id)
              GROUP BY n.person_id, p.first_name, p.last_name, p.preferred_name
