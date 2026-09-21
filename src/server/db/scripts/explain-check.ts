@@ -80,6 +80,37 @@ function* nodes(plan: Record<string, unknown>): Generator<Record<string, unknown
   for (const child of (plan.Plans as Record<string, unknown>[] | undefined) ?? []) yield* nodes(child);
 }
 
+/** The time a node spent on its own, without its children. */
+function ownTime(node: Record<string, unknown>): number {
+  const total = Number(node['Actual Total Time'] ?? 0) * Number(node['Actual Loops'] ?? 1);
+  const children = ((node.Plans as Record<string, unknown>[] | undefined) ?? []).reduce(
+    (sum, child) => sum + Number(child['Actual Total Time'] ?? 0) * Number(child['Actual Loops'] ?? 1),
+    0,
+  );
+  return Math.max(0, total - children);
+}
+
+/** Prints the slowest statement of a scenario and where its time went. */
+function describe(plans: { sql: string; plan: Record<string, unknown> }[]): void {
+  const worst = plans
+    .map((entry) => ({ ...entry, ms: Number((entry.plan as { 'Execution Time'?: number })['Execution Time'] ?? 0) }))
+    .sort((a, b) => b.ms - a.ms)[0];
+  if (!worst) return;
+
+  console.log(`    slowest statement: ${worst.ms.toFixed(0)} ms`);
+  console.log(`    ${worst.sql.replace(/\s+/g, ' ').slice(0, 240)}`);
+  const hot = [...nodes(worst.plan.Plan as Record<string, unknown>)]
+    .map((node) => ({ node, ms: ownTime(node) }))
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, 3);
+  for (const { node, ms } of hot) {
+    const where = node['Relation Name'] ? ` on ${String(node['Relation Name'])}` : '';
+    const rows = `${Number(node['Actual Rows'] ?? 0)} rows × ${Number(node['Actual Loops'] ?? 1)} loops`;
+    const index = node['Index Name'] ? `, index ${String(node['Index Name'])}` : '';
+    console.log(`      ${ms.toFixed(0)} ms — ${String(node['Node Type'])}${where} (${rows}${index})`);
+  }
+}
+
 try {
   const tableRows = new Map<string, number>();
   for (const row of await queryRows<{ table: string; rows: number }>(
@@ -162,6 +193,10 @@ try {
     const verdict = total > BUDGET_MS ? '✗' : '✓';
     if (total > BUDGET_MS) slow.push({ scenario: scenario.name, ms: total });
     console.log(`${verdict} ${scenario.name}: ${total.toFixed(1)} ms in ${statements.length} quer${statements.length === 1 ? 'y' : 'ies'}`);
+
+    // A scenario over budget is only useful if it says which statement, and why. Print the worst
+    // one with the handful of plan nodes that actually spent the time.
+    if (total > BUDGET_MS) describe(plans as { sql: string; plan: Record<string, unknown> }[]);
   }
 
   writeFileSync('explain-plans.json', JSON.stringify(snapshots, null, 2));

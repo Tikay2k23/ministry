@@ -98,7 +98,7 @@ jobs:
       - name: Query plans for the hottest pages
         run: |
           set -o pipefail
-          npm run db:explain 2>&1 | tee step.log || { echo "::error title=db:explain::$(tail -30 step.log | tr '\n' ' ' | cut -c1-900)"; exit 1; }
+          npm run db:explain 2>&1 | tee step.log || { echo "::error title=db:explain::$(tail -45 step.log | tr '\n' ' ' | cut -c1-3000)"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         if: always()
