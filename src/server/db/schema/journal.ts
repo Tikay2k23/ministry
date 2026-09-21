@@ -124,6 +124,8 @@ export const journalDays = pgTable(
     check('journal_days_expected_consistency', sql`is_expected OR submission_status IN ('submitted', 'late', 'excused')`),
     check('journal_days_review_needs_entry', sql`review_status = 'none' OR entry_id IS NOT NULL`),
     index('journal_days_by_leader').on(t.journalDate, t.leaderPersonId),
+    /** The dashboard's Primary Leader cards: one grouped read of the day, whatever the size. */
+    index('journal_days_by_primary').on(t.journalDate, t.primaryLeaderPersonId),
     index('journal_days_branch').using('gin', t.journalDate, t.hierarchyPath),
     index('journal_days_open').on(t.journalDate).where(sql`finalized_at IS NULL`),
     index('journal_days_awaiting').on(t.leaderPersonId, t.journalDate).where(sql`review_status = 'awaiting'`),

@@ -1,0 +1,1 @@
+CREATE INDEX "journal_days_by_primary" ON "journal_days" USING btree ("journal_date","primary_leader_person_id");

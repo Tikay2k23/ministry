@@ -140,6 +140,9 @@ try {
   const scenarios: Scenario[] = [
     { name: "Leader's Daily Journal today", run: (db) => getJournalOverview(db, leaderCtx, {}) },
     { name: "Primary Leader's whole branch today", run: (db) => getJournalOverview(db, primaryCtx, { view: 'branch' }) },
+    { name: 'Dashboard: the whole ministry today', run: (db) => getJournalOverview(db, adminCtx, {}) },
+    { name: 'Dashboard: one branch, not yet sent', run: (db) => getJournalOverview(db, adminCtx, { primaryLeaderId: leader.parent_person_id, status: 'not_yet' }) },
+    { name: 'Dashboard: a name search', run: (db) => getJournalOverview(db, adminCtx, { q: 'santos' }) },
     { name: 'Review queue', run: (db) => listAwaitingReview(db, leaderCtx, {}) },
     { name: 'One person’s journal history', run: (db) => getPersonJournalSummary(db, leaderCtx, member!.person_id) },
     { name: 'Person profile', run: (db) => getPersonDetail(db, leaderCtx, member!.person_id) },

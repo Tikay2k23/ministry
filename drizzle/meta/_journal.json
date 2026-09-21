@@ -71,6 +71,13 @@
       "when": 1789999772706,
       "tag": "0009_journal_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790016484953,
+      "tag": "0010_journal_days_by_primary",
+      "breakpoints": true
     }
   ]
 }

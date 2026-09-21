@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RequestContext } from '@/server/context/request-context';
 import type { DatabaseHandle } from '@/server/db/client';
+import type { PermissionKey } from '@/server/policy/catalog';
 import { auditLogs, hierarchyNodes, journalDays, people } from '@/server/db/schema';
 import { listFollowUps, updateFollowUp } from '@/server/modules/care/care.service';
 import { getPublishedForm, JOURNAL_FORM_KEY } from '@/server/modules/forms/forms.service';
@@ -32,6 +33,7 @@ import {
   registerParticipant,
   resolveParticipantKey,
 } from '@/server/modules/public/participants.service';
+import { addMinistryMember, createMinistry } from '@/server/modules/ministries/ministries.service';
 import { getSetting, updateSetting } from '@/server/modules/settings/settings.service';
 import { createTestDatabase } from '../helpers/db';
 import { globalGrant, userContext } from '../helpers/fixtures';
@@ -112,6 +114,152 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await handle.close();
+});
+
+/**
+ * The dashboard on /app/journal: the Primary Leader cards at the top, the filters under them and
+ * the table below. It runs before the tests that excuse days and pause people, so the ministry is
+ * still as buildWorld left it: seven people expected, John's journal received.
+ */
+describe('the daily journal dashboard', () => {
+  const statusOnly = (extra: PermissionKey[] = []) =>
+    userContext(
+      { id: world.admin.actor.kind === 'user' ? world.admin.actor.userId : '' },
+      [globalGrant('journal.status.view'), ...extra.map((key) => globalGrant(key))],
+      at('10:00'),
+    );
+
+  it('gives one card per Primary Leader, counted from the branch each day recorded', async () => {
+    const all = await getJournalOverview(db, office(), {});
+
+    expect(all.branches).toEqual([
+      { primaryLeaderId: world.ids.michael, name: 'Michael Reyes', expected: 3, received: 1, notYet: 2, missed: 0, excused: 0 },
+      { primaryLeaderId: world.ids.samuel, name: 'Samuel Torres', expected: 3, received: 0, notYet: 3, missed: 0, excused: 0 },
+    ]);
+    // Eduardo leads the whole ministry, so he belongs to no branch of it: the cards hold six of
+    // the seven people, and the summary above them still counts all seven.
+    expect(all.branches.reduce((n, b) => n + b.expected, 0)).toBe(6);
+    expect(all.summary.expected).toBe(7);
+  });
+
+  it('shows one branch when a card is opened, and offers that branch’s leaders as the next filter', async () => {
+    const branch = await getJournalOverview(db, office(), { primaryLeaderId: world.ids.michael });
+
+    expect(branch.primaryLeader).toEqual({ id: world.ids.michael, name: 'Michael Reyes' });
+    expect(branch.people.map((r) => r.personId).sort()).toEqual([world.ids.john, world.ids.mark, world.ids.michael].sort());
+    expect(branch.summary).toMatchObject({ expected: 3, received: 1 });
+    // The Direct Leader picker offers the leaders inside this branch, not the branch's own leader.
+    expect(branch.branchLeaders.map((l) => l.name)).toEqual(['Mark Santos']);
+    expect((await getJournalOverview(db, office(), { primaryLeaderId: world.ids.samuel })).branchLeaders.map((l) => l.name)).toEqual(['Anna Lim']);
+  });
+
+  it('narrows to one leader’s own group inside the branch', async () => {
+    const group = await getJournalOverview(db, office(), { primaryLeaderId: world.ids.michael, leaderId: world.ids.mark });
+    expect(group.view).toBe('direct');
+    expect(group.leader).toMatchObject({ id: world.ids.mark, isSelf: false });
+    expect(group.people.map((r) => r.personId)).toEqual([world.ids.john]);
+  });
+
+  it('reads each person’s role from the tree and their record, and filters on the same answer', async () => {
+    const all = await getJournalOverview(db, office(), { sort: 'name' });
+    const roleOf = (id: string) => all.people.find((r) => r.personId === id)?.role;
+    expect(roleOf(world.ids.michael)).toBe('primary_leader');
+    expect(roleOf(world.ids.mark)).toBe('leader');
+    expect(roleOf(world.ids.john)).toBe('member');
+
+    const primaries = await getJournalOverview(db, office(), { role: 'primary_leader' });
+    expect(primaries.people.map((r) => r.personId).sort()).toEqual([world.ids.michael, world.ids.samuel].sort());
+
+    const leaders = await getJournalOverview(db, office(), { role: 'leader' });
+    // Mark and Anna lead a group; so does Eduardo, who sits above the Primary Leaders.
+    expect(leaders.people.map((r) => r.personId).sort()).toEqual([world.ids.anna, world.ids.mark, world.ids.pastor].sort());
+
+    const members = await getJournalOverview(db, office(), { role: 'member' });
+    expect(members.people.map((r) => r.personId).sort()).toEqual([world.ids.grace, world.ids.john].sort());
+    // Whatever the filter says, every row it returns says the same thing.
+    for (const row of members.people) expect(row.role).toBe('member');
+  });
+
+  it('filters by ministry without disturbing the leadership branch', async () => {
+    const { ministryId } = await createMinistry(db, office(), { name: 'Worship Team', code: 'WORSHIP' });
+    await addMinistryMember(db, office(), { personId: world.ids.john, ministryId });
+
+    const serving = await getJournalOverview(db, office(), { ministryId });
+    expect(serving.people.map((r) => r.personId)).toEqual([world.ids.john]);
+    expect(serving.people[0]!.ministryName).toBe('Worship Team');
+    // Serving somewhere does not move anyone: John is still counted in Michael's branch.
+    expect(serving.branches.find((b) => b.primaryLeaderId === world.ids.michael)?.expected).toBe(3);
+    const both = await getJournalOverview(db, office(), { ministryId, primaryLeaderId: world.ids.samuel });
+    expect(both.people).toEqual([]);
+  });
+
+  it('searches by name, and will not confirm a mobile number to someone who may not see it', async () => {
+    await db.update(people).set({ phoneE164: '+639171234567' }).where(eq(people.id, world.ids.john));
+
+    expect((await getJournalOverview(db, office(), { q: 'cruz' })).people.map((r) => r.personId)).toEqual([world.ids.john]);
+    expect((await getJournalOverview(db, office(), { q: 'nobody here' })).people).toEqual([]);
+
+    const withContact = await getJournalOverview(db, statusOnly(['people.contact.view']), { q: '0917 123 4567' });
+    expect(withContact.contactVisible).toBe(true);
+    expect(withContact.people.map((r) => r.personId)).toEqual([world.ids.john]);
+
+    const withoutContact = await getJournalOverview(db, statusOnly(), { q: '0917 123 4567' });
+    expect(withoutContact.contactVisible).toBe(false);
+    expect(withoutContact.people).toEqual([]);
+    // The name search still works for them; only the number is withheld.
+    expect((await getJournalOverview(db, statusOnly(), { q: 'cruz' })).people.map((r) => r.personId)).toEqual([world.ids.john]);
+  });
+
+  it('counts the chips over everyone the filters left, not over the page or the chosen status', async () => {
+    const all = await getJournalOverview(db, office(), {});
+    expect(all.totals).toMatchObject({ all: 7, received: 1, not_yet: 6, missed: 0, excused: 0, has_proof: 0 });
+
+    // Choosing a chip narrows the table without re-deciding what the other chips say.
+    const received = await getJournalOverview(db, office(), { status: 'received' });
+    expect(received.people.map((r) => r.personId)).toEqual([world.ids.john]);
+    expect(received.total).toBe(1);
+    expect(received.totals).toEqual(all.totals);
+
+    // Narrowing the population does recount them.
+    const branch = await getJournalOverview(db, office(), { primaryLeaderId: world.ids.michael });
+    expect(branch.totals.all).toBe(3);
+  });
+
+  it('pages and sorts on the server, and keeps the counts whole while it does', async () => {
+    const first = await getJournalOverview(db, office(), {});
+    expect(first).toMatchObject({ page: 1, pageSize: 25, sort: 'status' });
+    // The people who have not sent anything come first; John, who has, comes last.
+    expect(first.people.at(-1)!.personId).toBe(world.ids.john);
+
+    const byName = await getJournalOverview(db, office(), { sort: 'name', pageSize: 50 });
+    expect(byName.pageSize).toBe(50);
+    expect(byName.people.map((r) => r.name)).toEqual([
+      'John Cruz', 'Anna Lim', 'Grace Mendoza', 'Michael Reyes', 'Mark Santos', 'Samuel Torres', 'Eduardo Villanueva',
+    ]);
+
+    const second = await getJournalOverview(db, office(), { page: 2 });
+    expect(second.people).toEqual([]);
+    expect(second.totals.all).toBe(7);
+
+    // A size nobody offered falls back to the default rather than reading the whole ministry.
+    expect((await getJournalOverview(db, office(), { pageSize: 5000 })).pageSize).toBe(25);
+  });
+
+  it('keeps a leader inside their own branch, whatever the filters ask for', async () => {
+    // Dropping the group filter shows Mark his own day alongside John's, and nothing of Samuel's.
+    const everyone = await getJournalOverview(db, mark(), { view: 'all' });
+    expect(everyone.people.map((r) => r.personId).sort()).toEqual([world.ids.john, world.ids.mark].sort());
+    // Mark may open the card for the branch he is in, and it counts only the people he may see.
+    expect(everyone.branches).toEqual([
+      { primaryLeaderId: world.ids.michael, name: 'Michael Reyes', expected: 2, received: 1, notYet: 1, missed: 0, excused: 0 },
+    ]);
+    const own = await getJournalOverview(db, mark(), { primaryLeaderId: world.ids.michael });
+    expect(own.people.map((r) => r.personId).sort()).toEqual([world.ids.john, world.ids.mark].sort());
+    expect(own.branchLeaders.map((l) => l.id)).toEqual([world.ids.mark]);
+
+    await expect(getJournalOverview(db, mark(), { primaryLeaderId: world.ids.samuel })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(getJournalOverview(db, mark(), { leaderId: world.ids.anna })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
 });
 
 describe('portal journal', () => {
