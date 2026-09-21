@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { and, asc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
-import sharp, { type Sharp } from 'sharp';
+import type { Sharp } from 'sharp';
 import { z } from 'zod';
 import { newId } from '@/lib/ids';
 import type { Database, Executor, Transaction } from '../../db/client';
@@ -43,6 +43,13 @@ export const SIGNED_URL_SECONDS = 60;
 /** An upload waits this long for its journal before the cleanup job deletes it. */
 export const PENDING_HOURS = 24;
 
+/**
+ * sharp carries tens of megabytes of native binaries. Loading it only when a photo actually
+ * arrives keeps it out of the server's startup path — the cleanup job imports this module — and out
+ * of the journal route's import graph, where it delayed the first requests after a cold start.
+ */
+const loadSharp = async () => (await import('sharp')).default;
+
 const ACCEPTED = new Set(['jpeg', 'png', 'webp']);
 
 export interface ProcessedImage {
@@ -62,6 +69,7 @@ export async function processProofImage(input: Buffer): Promise<ProcessedImage> 
     throw validationError({ file: ['Please choose an image smaller than 5 MB.'] });
   }
 
+  const sharp = await loadSharp();
   let pipeline: Sharp;
   let format: string | undefined;
   try {

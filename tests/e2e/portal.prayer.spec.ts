@@ -1,4 +1,4 @@
-import { devices } from '@playwright/test';
+import { devices, type Locator, type Page } from '@playwright/test';
 import { E2E_BASE_URL, E2E_MEMBER } from './support/e2e-env';
 import { expect, test } from './support/fixtures';
 
@@ -34,7 +34,9 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
   const assign = page.getByRole('dialog', { name: 'Assign someone' });
   await assign.getByRole('searchbox', { name: 'Search people' }).fill(E2E_MEMBER.firstName);
   await assign.getByRole('button', { name: new RegExp(memberName) }).click();
-  await expect(assign).toBeHidden();
+  // The dialog closes when the assignment is saved. If it doesn't, the reason is on screen —
+  // report it, rather than leaving a bare 'still visible' 20 seconds later.
+  await expect(assign, await assignmentProblem(assign)).toBeHidden();
   await expect(page.getByText('Upcoming', { exact: true })).toBeVisible();
 
   // The coordinator shares the member's personal link.
@@ -63,7 +65,7 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
     await mobile.getByLabel('First name').fill(E2E_MEMBER.firstName);
     await mobile.waitForTimeout(HUMAN_PAUSE_MS);
     await mobile.getByRole('button', { name: 'Continue' }).click();
-    await expect(mobile.getByRole('heading', { name: `Hello, ${E2E_MEMBER.firstName}!` })).toBeVisible();
+    await expect(mobile.getByRole('heading', { name: `Hello, ${E2E_MEMBER.firstName}!` }), await identifyProblem(mobile)).toBeVisible();
     await expect(mobile.getByText('Confirmed — thank you!')).toBeVisible();
   } finally {
     await phone.close();
@@ -73,3 +75,23 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
   await page.reload();
   await expect(page.getByText('Confirmed', { exact: true })).toBeVisible();
 });
+
+/**
+ * What the page says when a step doesn't go through — a rate limit, a validation message, a server
+ * error — so a failure here names its cause instead of only the element that never appeared.
+ */
+async function assignmentProblem(dialog: Locator): Promise<string> {
+  const message = await firstAlert(dialog);
+  return message ? `assigning was refused: ${message}` : 'the assign dialog never closed, and showed no message';
+}
+
+async function identifyProblem(page: Page): Promise<string> {
+  const message = await firstAlert(page);
+  return message ? `identifying was refused: ${message}` : 'the chain page did not recognise the member, and showed no message';
+}
+
+async function firstAlert(within: Locator | Page): Promise<string> {
+  const alert = within.getByRole('alert');
+  if ((await alert.count()) === 0) return '';
+  return (await alert.first().innerText().catch(() => '')).trim();
+}
