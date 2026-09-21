@@ -57,6 +57,8 @@ Decide and announce first: **everything written after the restore point will be 
    npm run db:check -- "<session pooler URL>"
    ```
    Seven checks: every migration applied; reference data present; exactly one active general QR code; the closure table matches the leadership tree row for row, with the right depths and primary leaders; no node whose leader is missing; no journal answers without their ledger day; and a contents summary (people, portal users, ledger days, journals) to compare with what you expect.
+
+   **Give it time.** Each check prints as it finishes, with how long it took. The leadership-tree check walks the whole tree and is the slow one: seconds for today's ~1,900 people, but about seven minutes at 50,000 (measured in the Performance workflow). A long pause there is the check working, not a hang.
 4. **Re-enable the scheduler**: re-run `deploy/supabase-cron.sql`'s `cron.schedule` block.
 5. **Check the app**: `npm run smoke -- https://<production URL>`, then the System health page for job runs.
 6. **Tell people** what window was lost, and ask the pilot branch to re-send journals for it.
