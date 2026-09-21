@@ -67,6 +67,15 @@ export const SENSITIVITIES = ['standard', 'restricted', 'confidential'] as const
 /** How the participant's identity was established for a submission. */
 export const JOURNAL_CHANNELS = ['registration', 'phone_match', 'personal_link', 'otp', 'proxy'] as const;
 export const JOURNAL_TIMINGS = ['on_time', 'late'] as const;
+/** What a journal attachment is for. Only photo proof today; kept open for later kinds. */
+export const ATTACHMENT_KINDS = ['proof'] as const;
+/**
+ * An attachment's life: uploaded but not yet part of a journal (`pending`, cleaned up after a
+ * day), attached to one (`attached`), or taken off by an administrator (`removed`).
+ */
+export const ATTACHMENT_STATUSES = ['pending', 'attached', 'removed'] as const;
+/** The image formats a proof photo is stored as. Anything else is refused. */
+export const ATTACHMENT_MIME_TYPES = ['image/webp', 'image/jpeg', 'image/png'] as const;
 export const SUBMISSION_STATUSES = ['pending', 'submitted', 'late', 'missed', 'excused'] as const;
 export const REVIEW_STATUSES = ['none', 'awaiting', 'reviewed'] as const;
 export const DAY_CARE_STATUSES = ['none', 'needs_follow_up', 'resolved'] as const;
@@ -151,6 +160,8 @@ export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
 export type Sensitivity = (typeof SENSITIVITIES)[number];
 export type SubmissionStatus = (typeof SUBMISSION_STATUSES)[number];
 export type JournalChannel = (typeof JOURNAL_CHANNELS)[number];
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
+export type AttachmentStatus = (typeof ATTACHMENT_STATUSES)[number];
 
 export type Gender = (typeof GENDERS)[number];
 export type PersonStatus = (typeof PERSON_STATUSES)[number];

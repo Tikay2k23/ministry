@@ -32,6 +32,7 @@ import {
   registerParticipant,
   resolveParticipantKey,
 } from '@/server/modules/public/participants.service';
+import { getSetting, updateSetting } from '@/server/modules/settings/settings.service';
 import { createTestDatabase } from '../helpers/db';
 import { globalGrant, userContext } from '../helpers/fixtures';
 import { buildWorld } from '../helpers/world';
@@ -66,6 +67,9 @@ beforeAll(async () => {
   handle = await createTestDatabase();
   db = handle.db;
   world = await buildWorld(db);
+  // These tests are about the journal itself, not the photo (tests/integration/journal-proof.test.ts),
+  // so the ministry setting is left inviting a photo rather than insisting on one.
+  await updateSetting(db, world.admin, 'journal.policy', { ...(await getSetting(db, 'journal.policy')), proofImage: 'optional' });
 
   const form = (await getPublishedForm(db, JOURNAL_FORM_KEY))!;
   versionId = form.versionId;
@@ -103,6 +107,7 @@ beforeAll(async () => {
     },
   });
   johnEntryId = (await dayOf(world.ids.john))!.entryId!;
+
 });
 
 afterAll(async () => {

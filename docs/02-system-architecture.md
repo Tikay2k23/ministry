@@ -245,6 +245,16 @@ Request arrives at /j or /j/{code}
 - **Personal links.** `/k/{token}` renders a confirmation page, so chat-app link previews can't use up the link. Its button POSTs the token, and the page sends `Referrer-Policy: no-referrer`.
 - **Different leader's QR code.** Suppose an identified person journals through another leader's QR code and confirms "this is my leader now". That creates a pending leader-change request, never a direct move.
 
+**Implementation note (2026-09-21): journal proof photos.** Members photograph the notebook they wrote in and send it with their journal. The rule is one setting, `journal.policy.proofImage` — `required`, `optional` or `off` — so the ministry can change its mind in Settings → Daily Journal without a deploy. It ships as **required**.
+
+- **The bytes are never trusted.** The photo is decoded on the server (`src/server/modules/journal/proof.service.ts`), which is what proves it really is a JPEG, PNG or WebP whatever the filename says, then rotated by its EXIF orientation, resized to 2000 px on the long side and re-encoded as WebP. Re-encoding drops EXIF, so no GPS coordinates or device names are ever stored. A "small" file that decodes to a huge canvas is refused by a pixel limit.
+- **It goes through our server, not straight to storage.** Vercel refuses a request body over 4.5 MB, so the page shrinks the photo on the phone first (usually to a few hundred KB) and posts it to `/api/public/journal/proof`. The alternative — a signed upload URL straight to Supabase — would let unchecked bytes land in the bucket and would have to be downloaded, sniffed and rewritten afterwards anyway, so this is both simpler and safer. The service-role key never leaves the server.
+- **Sent, then attached.** An upload is stored as `pending` and belongs to no journal. The journal's own transaction attaches it, so a journal is never recorded as complete with its required photo missing. Anything still `pending` after a day is deleted by the `journal.proof_cleanup` job, as are photos an administrator removes.
+- **Private, and only ever briefly.** The bucket is private; a viewer gets a link that stops working after a minute, made only after the policy layer agrees. Nothing public or permanent is ever stored in the database — only where the file is and what it is.
+- **Who may look** is `journal.proof.view`, separate from reading the typed answers (docs/06 rows 15a–15b, note m). Removing a photo is `journal.proof.manage`, which is pastoral and global.
+- **Journals recorded by a leader over the phone** (`journal.proxy_submit`) are not asked for a photo: the person is not holding the notebook.
+- **Storage drivers** follow the same shape as the email providers: `STORAGE_DRIVER=local` writes to a directory in development and tests, `supabase` uses the private bucket in production. Local links are served by `/api/journal/proof/file`, which checks the same signature and expiry Supabase would, so development behaves like production instead of pretending files are public.
+
 ---
 
 ## 5. QR architecture

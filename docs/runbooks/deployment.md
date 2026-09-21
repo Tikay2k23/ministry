@@ -67,6 +67,10 @@ Everything in `.env.example` applies; these are the ones production needs to be 
    ```
    Use `app_rw` in `DATABASE_URL`. `gentouch_app` and its row-level-security policies come from migration 0007.
 4. **Upstash**: create the database, then set the three rate-limit variables.
+4b. **Storage for journal photos** (Supabase → Storage):
+   - Create a bucket named `journal-proofs` and leave it **private**. Do not add any policy for `anon` or `authenticated`: the app reaches it with the service-role key from the server, and viewers only ever get links that expire after a minute.
+   - Set `STORAGE_DRIVER=supabase`, `STORAGE_BUCKET=journal-proofs`, `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Vercel. The service-role key is server-only — it must never appear in a `NEXT_PUBLIC_` variable.
+   - These photos are the most sensitive files the ministry holds: a page of someone's handwriting, often mentioning other people. Treat the bucket like the database, and settle the retention question in [recovery.md](recovery.md) before the pilot grows.
 5. **Vercel**: import the GitHub repository, set the region to Singapore, add every variable from §3, and deploy.
 6. **Check it before telling anyone the address**:
    ```bash

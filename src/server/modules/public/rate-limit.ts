@@ -23,6 +23,9 @@ export const RATE_LIMITS = {
   identifyPerPhone: { limit: 5, windowSeconds: 15 * 60 },
   registerPerIp: { limit: 10, windowSeconds: 60 * 60 },
   submitPerPerson: { limit: 10, windowSeconds: 60 },
+  /** Journal photos: a few retries per person, and a ceiling per connection so uploads can't be abused. */
+  proofUploadPerPerson: { limit: 10, windowSeconds: 15 * 60 },
+  proofUploadPerIp: { limit: 60, windowSeconds: 15 * 60 },
   leaderSearchPerIp: { limit: 60, windowSeconds: 60 },
   personalLinkPerIp: { limit: 10, windowSeconds: 15 * 60 },
   prayerRespondPerIp: { limit: 60, windowSeconds: 15 * 60 },

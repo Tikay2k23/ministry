@@ -10,11 +10,15 @@ import {
   smallint,
   text,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { createdAt, oneOf, pk, tstz, updatedAt } from '../columns';
 import {
+  ATTACHMENT_KINDS,
+  ATTACHMENT_MIME_TYPES,
+  ATTACHMENT_STATUSES,
   DAY_CARE_STATUSES,
   EXCUSE_REASONS,
   JOURNAL_CHANNELS,
@@ -166,6 +170,62 @@ export const journalPauses = pgTable(
     check('journal_pauses_reason_check', oneOf('reason', PAUSE_REASONS)),
     check('journal_pauses_dates', sql`ends_on IS NULL OR ends_on >= starts_on`),
     index('journal_pauses_person').on(t.personId).where(sql`cancelled_at IS NULL`),
+  ],
+);
+
+/**
+ * Files that belong to a journal — today only the photo of a written journal that a member sends
+ * as proof (docs/02 §4 "Journal proof"). The image itself lives in private object storage; this
+ * table holds only where it is and what it is, so the database stays small and the bytes are
+ * reachable only through a short-lived signed link.
+ *
+ * `entry_id` is null while an upload waits for its journal to be sent, which is what keeps an
+ * abandoned upload from becoming a dangling row: the cleanup job deletes `pending` rows, and the
+ * file with them. One proof per journal is enforced by a partial unique index, but the table is
+ * a list on purpose, so a second kind of attachment needs no migration.
+ */
+export const journalAttachments = pgTable(
+  'journal_attachments',
+  {
+    id: pk(),
+    entryId: uuid('entry_id').references((): AnyPgColumn => journalEntries.id, { onDelete: 'cascade' }),
+    /** Who the file belongs to, so a pending upload can be found and limited before it has a journal. */
+    personId: uuid('person_id')
+      .notNull()
+      .references((): AnyPgColumn => people.id),
+    kind: text('kind', { enum: ATTACHMENT_KINDS }).notNull().default('proof'),
+    status: text('status', { enum: ATTACHMENT_STATUSES }).notNull().default('pending'),
+    storageBucket: text('storage_bucket').notNull(),
+    /** Server-generated, never a name the browser chose (docs/02 §8 "Uploads"). */
+    storagePath: text('storage_path').notNull(),
+    mimeType: text('mime_type', { enum: ATTACHMENT_MIME_TYPES }).notNull(),
+    fileSizeBytes: integer('file_size_bytes').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    /** SHA-256 of the stored bytes: proves the file was not swapped underneath the row. */
+    checksum: text('checksum').notNull(),
+    uploadedVia: text('uploaded_via', { enum: JOURNAL_CHANNELS }).notNull(),
+    createdAt: createdAt(),
+    attachedAt: tstz('attached_at'),
+    removedAt: tstz('removed_at'),
+    removedBy: uuid('removed_by').references((): AnyPgColumn => users.id),
+    /** When the file itself was deleted. The row stays, so the record still shows it existed. */
+    deletedFileAt: tstz('deleted_file_at'),
+  },
+  (t) => [
+    check('journal_attachments_kind_check', oneOf('kind', ATTACHMENT_KINDS)),
+    check('journal_attachments_status_check', oneOf('status', ATTACHMENT_STATUSES)),
+    check('journal_attachments_mime_check', oneOf('mime_type', ATTACHMENT_MIME_TYPES)),
+    check('journal_attachments_size', sql`file_size_bytes > 0`),
+    // A photo waiting for its journal has none; an attached one knows which journal and when. A
+    // removed one keeps both, so the record still shows which journal it was taken off.
+    check('journal_attachments_pending_unattached', sql`status <> 'pending' OR (entry_id IS NULL AND attached_at IS NULL)`),
+    check('journal_attachments_attached_complete', sql`status <> 'attached' OR (entry_id IS NOT NULL AND attached_at IS NOT NULL)`),
+    unique('journal_attachments_path').on(t.storageBucket, t.storagePath),
+    // One live proof per journal, without stopping a replaced one from staying on the record.
+    uniqueIndex('journal_attachments_one_proof').on(t.entryId, t.kind).where(sql`status = 'attached'`),
+    // The cleanup job's query: pending uploads, oldest first.
+    index('journal_attachments_pending').on(t.createdAt).where(sql`status = 'pending'`),
   ],
 );
 

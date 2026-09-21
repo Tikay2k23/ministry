@@ -24,6 +24,17 @@ const EnvSchema = z
     RATE_LIMIT_STORE: z.enum(['postgres', 'upstash']).default('postgres'),
     UPSTASH_REDIS_REST_URL: z.url().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
+    /**
+     * Where journal proof photos are kept (docs/02 §4). Supabase Storage in production, a local
+     * directory in development and tests. Never a public bucket: the files are people's journals.
+     */
+    STORAGE_DRIVER: z.enum(['local', 'supabase']).default('local'),
+    STORAGE_BUCKET: z.string().min(1).default('journal-proofs'),
+    /** STORAGE_DRIVER=local: the directory files are written to. */
+    STORAGE_DIR: z.string().min(1).default('.data/uploads'),
+    SUPABASE_URL: z.url().optional(),
+    /** Server only. Never expose this to the browser: it can read and write every bucket. */
+    SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
     /** How background jobs run (docs/02 §7). */
     SCHEDULER_MODE: z.enum(['in_process', 'external', 'off']).default('in_process'),
     /** Required for SCHEDULER_MODE=external: the bearer token Supabase Cron sends to /api/cron/tick. */
@@ -45,6 +56,16 @@ const EnvSchema = z
         path: ['UPSTASH_REDIS_REST_URL'],
         message: 'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are required when RATE_LIMIT_STORE=upstash',
       });
+    }
+    if (env.STORAGE_DRIVER === 'supabase' && (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SUPABASE_URL'],
+        message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required when STORAGE_DRIVER=supabase',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.STORAGE_DRIVER === 'local') {
+      ctx.addIssue({ code: 'custom', path: ['STORAGE_DRIVER'], message: 'local file storage is for development and tests only' });
     }
     if (env.SCHEDULER_MODE === 'external' && !env.CRON_SECRET) {
       ctx.addIssue({ code: 'custom', path: ['CRON_SECRET'], message: 'required when SCHEDULER_MODE=external' });

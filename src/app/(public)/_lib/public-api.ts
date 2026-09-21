@@ -37,6 +37,51 @@ export async function callApi<T>(method: 'GET' | 'POST' | 'PUT', url: string, bo
   };
 }
 
+/** Posts a file to a public route. Same error shape as callApi, so callers handle one thing. */
+export async function uploadApi<T>(url: string, form: FormData): Promise<ApiResult<T>> {
+  let response: Response;
+  try {
+    // No Content-Type header: the browser sets it with the multipart boundary.
+    response = await fetch(url, { method: 'POST', cache: 'no-store', credentials: 'same-origin', body: form });
+  } catch {
+    return { ok: false, status: 0, error: OFFLINE };
+  }
+  const json = (await response.json().catch(() => null)) as { data?: T; error?: ApiError } | null;
+  if (response.ok && json && 'data' in json) return { ok: true, data: json.data as T };
+  return {
+    ok: false,
+    status: response.status,
+    error: json?.error ?? { code: 'INTERNAL', message: 'We couldn’t send that photo. Please try again.' },
+  };
+}
+
+/**
+ * Shrinks a photo in the browser before it is sent: a phone camera file is often 5–12 MB, which
+ * is slow on mobile data and larger than a serverless function will accept. The server resizes
+ * and re-encodes again anyway, so this is about the journey, not the result. Returns the original
+ * file if the browser can't do it, and lets the server decide.
+ */
+export async function shrinkImage(file: File, maxSide = 2000): Promise<Blob> {
+  try {
+    if (!('createImageBitmap' in globalThis) || typeof OffscreenCanvas === 'undefined') return file;
+    // `from-image` applies the camera's rotation before drawing. Without it a portrait photo would
+    // be re-encoded sideways, and re-encoding drops the EXIF the server would have used to fix it.
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const blob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 });
+    return blob.size < file.size ? blob : file;
+  } catch {
+    return file;
+  }
+}
+
 /** UUID v4 that also works on plain-HTTP origins, where crypto.randomUUID is unavailable. */
 export function newIdempotencyKey(): string {
   if (typeof crypto.randomUUID === 'function' && globalThis.isSecureContext) return crypto.randomUUID();

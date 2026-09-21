@@ -18,6 +18,12 @@ import { isSameOrigin } from './route';
  */
 
 const MAX_BODY_BYTES = 100_000;
+/**
+ * Uploads only (journal proof photos). Vercel refuses a request body over 4.5 MB before it ever
+ * reaches this code, so the page shrinks photos on the phone first; this is the backstop for a
+ * browser that couldn't, and the 5 MB rule members are told about lives in proof.service.ts.
+ */
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const BASE_HEADERS = { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' };
 
 export function participantCookieName(): string {
@@ -35,6 +41,8 @@ export interface PublicRoute {
   requireIdentity(): Promise<ParticipantIdentity>;
   /** The JSON object body of a mutation. */
   body(): Promise<Record<string, unknown>>;
+  /** A multipart upload: the file's bytes and the text fields sent with it. */
+  upload(field: string): Promise<{ bytes: Buffer; fields: Record<string, string> }>;
   setKey(key: IssuedKey): void;
   clearKey(): void;
 }
@@ -104,6 +112,21 @@ export function publicJsonRoute<T>(handler: (route: PublicRoute) => Promise<T>, 
           // fall through
         }
         throw new AppError('VALIDATION_ERROR', 'Please reload the page and try again.');
+      },
+      async upload(field) {
+        if (Number(request.headers.get('content-length') ?? 0) > MAX_UPLOAD_BYTES) {
+          throw new AppError('VALIDATION_ERROR', 'Please choose an image smaller than 5 MB.');
+        }
+        const form = await request.formData().catch(() => {
+          throw new AppError('VALIDATION_ERROR', 'Please reload the page and try again.');
+        });
+        const file = form.get(field);
+        if (!(file instanceof File)) throw new AppError('VALIDATION_ERROR', 'Please choose a photo.');
+        if (file.size > MAX_UPLOAD_BYTES) throw new AppError('VALIDATION_ERROR', 'Please choose an image smaller than 5 MB.');
+
+        const fields: Record<string, string> = {};
+        for (const [key, value] of form.entries()) if (key !== field && typeof value === 'string') fields[key] = value;
+        return { bytes: Buffer.from(await file.arrayBuffer()), fields };
       },
       setKey(key) {
         cookieChange = { kind: 'set', key };

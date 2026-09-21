@@ -1,4 +1,4 @@
-import { ClipboardCheck, NotebookPen, SearchX } from 'lucide-react';
+import { Camera, ClipboardCheck, NotebookPen, SearchX } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -256,6 +256,13 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
                     <td className="px-4 py-3">
                       <span className="flex flex-wrap justify-end gap-1.5">
                         {p.reviewStatus === 'awaiting' && canReview && <Badge tone="slate">Awaiting review</Badge>}
+                        {/* Only that a photo is there. It is fetched when the journal is opened. */}
+                        {p.proofAttached && (
+                          <span className="inline-flex items-center gap-1 text-muted" title="A photo of the written journal was sent">
+                            <Camera aria-hidden className="size-4" />
+                            <span className="sr-only">Proof attached</span>
+                          </span>
+                        )}
                         {p.careStatus === 'needs_follow_up' && <Badge tone="amber">Follow-up</Badge>}
                         {p.byProxy && <Badge>Entered by a leader</Badge>}
                         {!p.isExpected && <Badge>Not expected yet</Badge>}

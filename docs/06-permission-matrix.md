@@ -57,6 +57,8 @@ Scope: **G** global · **B** own branch (self + downline) · **D** own direct gr
 | 13 | **Journal content: standard** answers | — ᶜ | VR G | VR G | — | VR D ᵈ | VR D | — | — | — | — |
 | 14 | **Journal content: restricted** answers | — ᶜ | V G | V G | — | V D | V D | — | — | — | — |
 | 15 | **Journal content: confidential** answers | — ᶜ | V G | V G | — | — | — | — | — | — | — |
+| 15a | **Journal proof photo** (the written journal) | — ᶜ | V G | V G | — | V D | V D | — | — | — | — |
+| 15b | Remove a proof photo from a journal | — ᶜ | E G | E G | — | — | — | — | — | — | — |
 | 16 | Leader review comments | — | CV G | CV G | — | CV D | CV D | — | — | — | — |
 | 17 | Journal excusals & personal pauses | CE G | CE G | CE G | CE G | CE B | CE D | — | — | — | — |
 | 18 | Proxy journal submission | — | — | — | — | C D | C D | — | — | — | — |
@@ -91,6 +93,7 @@ Scope: **G** global · **B** own branch (self + downline) · **D** own direct gr
 - **h** — Coordinators see reports for their chains, excluding confidential fields and anonymous identities.
 - **i** — Super Admins may assign any role. Assignments that include pastoral permissions notify all Pastors immediately and appear in the quarterly access review.
 - **j** — *Leader directory (implemented in M1).* Anyone with `people.view` can find, **by name only**, leaders who receive new people (`accepts_members`). This is the same information the public leader selector will show (FR-JRN-05), and it lets a leader request a transfer to a leader outside their own scope. No contact details, group members or journal data are exposed.
+- **m** — *Journal proof photos (M2 extension, 2026-09-21).* A photo of a written journal is a separate permission (`journal.proof.view`) from the typed answers, so the ministry can decide separately who reads words and who sees handwriting. It is granted to the same people as standard content by default: pastors and pastoral care ministry-wide, a leader and Primary Leader for their own direct group. Removing a photo (`journal.proof.manage`) is pastoral and global, so it is not something a leader — or the Super Admin, who holds no pastoral content — can do.
 - **k** — *Devotional scope (implemented in M4).*
   - **Seeing:** a `devotional.view` grant in any scope shows every gathering and roster (row 29 "V"), because rosters are shared openly in the ministry.
   - **Managing:** `devotional.manage` needs a global grant, a grant for the gathering type's ministry, or a grant for the gathering type itself (the new `gathering_type` scope). Other gatherings return `NOT_FOUND`.
@@ -142,7 +145,7 @@ Every ✅ in the content rows is logged in the access log. Every role with a con
 | People | `people.view` · `people.contact.view` · `people.create` · `people.edit` · `people.contact.edit` · `people.archive` · `people.merge` ⚠ · `people.export` ⚠ · `people.registrations.confirm` · `people.links.issue` · `import.manage` ⚠ |
 | Hierarchy | `hierarchy.view` · `hierarchy.manage` · `hierarchy.requests.decide` |
 | Ministries | `ministries.view` · `ministries.manage` · `ministry.structure.manage` · `ministry.members.manage` |
-| Journal | `journal.status.view` · `journal.content.view` ⚠✝ · `journal.content.restricted.view` ⚠✝ · `journal.content.confidential.view` ⚠✝ · `journal.review` · `journal.proxy_submit` · `journal.excuse` · `journal.settings.manage` · `forms.manage` · `forms.publish` |
+| Journal | `journal.status.view` · `journal.content.view` ⚠✝ · `journal.content.restricted.view` ⚠✝ · `journal.content.confidential.view` ⚠✝ · `journal.proof.view` ⚠✝ · `journal.proof.manage` ⚠✝ · `journal.review` · `journal.proxy_submit` · `journal.excuse` · `journal.settings.manage` · `forms.manage` · `forms.publish` |
 | Care & notes | `care.view` · `care.manage` · `care.pastoral.view` ⚠✝ · `notes.leadership.view` · `notes.leadership.create` · `notes.pastoral.view` ⚠✝ · `notes.pastoral.create` ⚠✝ |
 | Prayer | `prayer.view` · `prayer.manage` · `prayer.assign` · `prayer.resolve` · `prayer.reports.view` ⚠ · `prayer.requests.confidential.view` ⚠✝ |
 | Devotional | `devotional.view` · `devotional.manage` · `devotional.teams.manage` |

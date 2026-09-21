@@ -1264,6 +1264,8 @@ CREATE TABLE export_jobs (                          -- (V1) large/async exports,
 
 ---
 
+**Implementation note (2026-09-21): `journal_attachments`.** Photo proof of a written journal (migration 0009). The image lives in private object storage; the row holds only `storage_bucket`, `storage_path`, the mime type, size, dimensions and a SHA-256 of the stored bytes. `entry_id` is null while an upload waits for its journal, which is what keeps an abandoned upload from becoming a dangling row; two CHECKs keep the states honest (a `pending` row has no journal, an `attached` row has both a journal and a time), and a partial unique index allows one live proof per journal while keeping replaced ones on the record. Deleting a journal entry takes its attachments with it; `deleted_file_at` records that the file itself is gone while the row remains. Retention is deliberately not automatic (§9): the ministry decides how long photos are kept.
+
 ## 5. Relationship summary
 
 | Relationship | Cardinality | Enforced by |

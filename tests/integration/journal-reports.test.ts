@@ -7,6 +7,7 @@ import { zonedInstant } from '@/server/modules/journal/journal-dates';
 import { submitJournal } from '@/server/modules/journal/journal-submit.service';
 import { installPersonalLink, issuePersonalLink, resolveParticipantKey } from '@/server/modules/public/participants.service';
 import { exportJournalReport, getJournalGroupsReport, getJournalPeopleReport } from '@/server/modules/reports/journal-reports.service';
+import { getSetting, updateSetting } from '@/server/modules/settings/settings.service';
 import { createTestDatabase } from '../helpers/db';
 import { globalGrant, userContext } from '../helpers/fixtures';
 import { buildWorld } from '../helpers/world';
@@ -39,9 +40,13 @@ beforeAll(async () => {
   handle = await createTestDatabase();
   db = handle.db;
   world = await buildWorld(db);
+  // These tests are about the journal itself, not the photo (tests/integration/journal-proof.test.ts),
+  // so the ministry setting is left inviting a photo rather than insisting on one.
+  await updateSetting(db, world.admin, 'journal.policy', { ...(await getSetting(db, 'journal.policy')), proofImage: 'optional' });
   // John journals on time on the 15th; Grace sends the 16th late the next morning. Everyone else is quiet.
   await journalAs(world.ids.john, '2026-09-15', at('2026-09-15', '07:00'));
   await journalAs(world.ids.grace, '2026-09-16', at('2026-09-17', '08:00'));
+
 });
 
 afterAll(async () => {

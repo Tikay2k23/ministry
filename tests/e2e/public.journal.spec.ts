@@ -1,8 +1,15 @@
 import { expect, test } from '@playwright/test';
+import sharp from 'sharp';
 import { E2E_LEADER, E2E_MEMBER } from './support/e2e-env';
 
 /** Public forms turn away anything sent within two seconds of the page loading (bot protection). */
 const HUMAN_PAUSE_MS = 2_500;
+
+/** A photograph of a written journal, the way a phone would send one. */
+const photoOfAJournal = () =>
+  sharp({ create: { width: 1400, height: 1900, channels: 3, background: { r: 245, g: 243, b: 232 } } })
+    .jpeg()
+    .toBuffer();
 
 test('a member finds themselves by mobile number and sends today’s journal', async ({ page }) => {
   await page.goto('/j');
@@ -18,6 +25,17 @@ test('a member finds themselves by mobile number and sends today’s journal', a
 
   await page.getByLabel(/What is God speaking to you through it\?/).fill('He is teaching me to trust Him with my family.');
   await page.getByRole('group', { name: /Did you spend time in prayer today\?/ }).getByRole('radio', { name: 'Yes' }).check();
+
+  // The ministry asks for a photo of the written journal. The file input is hidden behind the
+  // camera and gallery buttons, so the test sets it the way the picker would.
+  await expect(page.getByRole('heading', { name: 'Journal Proof' })).toBeVisible();
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: 'journal.jpg',
+    mimeType: 'image/jpeg',
+    buffer: await photoOfAJournal(),
+  });
+  await expect(page.getByText('Ready to submit')).toBeVisible();
+
   await page.waitForTimeout(HUMAN_PAUSE_MS);
   await page.getByRole('button', { name: 'Send my journal' }).click();
 

@@ -8,6 +8,7 @@ import {
   careFollowups,
   formAnswerSets,
   formResponses,
+  journalAttachments,
   journalDays,
   journalEntries,
   journalReviews,
@@ -144,6 +145,10 @@ export async function getJournalOverview(db: Database, ctx: RequestContext, raw:
       isExpected: journalDays.isExpected,
       receivedAt: journalEntries.firstSubmittedAt,
       channel: journalEntries.channel,
+      // Only whether a photo is there: the list never loads or signs images (docs/02 §4).
+      proofAttached: sql<boolean>`EXISTS (
+        SELECT 1 FROM journal_attachments ja
+        WHERE ja.entry_id = ${journalDays.entryId} AND ja.kind = 'proof' AND ja.status = 'attached')`.mapWith(Boolean),
       leaderFirstName: leader.firstName,
       leaderLastName: leader.lastName,
     })
@@ -250,6 +255,7 @@ export async function getJournalOverview(db: Database, ctx: RequestContext, raw:
       isExpected: r.isExpected,
       receivedAt: r.receivedAt,
       byProxy: r.channel === 'proxy',
+      proofAttached: r.proofAttached,
       leaderName: view !== 'direct' && r.leaderFirstName ? `${r.leaderFirstName} ${r.leaderLastName}` : null,
       week: weekDates.map((d) => ({ date: d, status: historyByPerson.get(r.personId)?.get(d) ?? null })),
     })),
@@ -409,11 +415,21 @@ export async function getJournalEntry(db: Database, ctx: RequestContext, raw: un
     .where(eq(journalReviews.entryId, entry.id))
     .orderBy(asc(journalReviews.reviewedAt));
 
+  // The photo of the written journal. Whether this viewer may open it is a separate permission
+  // from reading the answers, so the id is only handed over to someone who holds it: nobody else
+  // learns it exists beyond the fact that one was sent.
+  const [proofRow] = await db
+    .select({ id: journalAttachments.id, width: journalAttachments.width, height: journalAttachments.height })
+    .from(journalAttachments)
+    .where(and(eq(journalAttachments.entryId, entry.id), eq(journalAttachments.kind, 'proof'), eq(journalAttachments.status, 'attached')));
+  const canSeeProof = proofRow ? await canAccessPerson(db, ctx, 'journal.proof.view', personId) : false;
+
   return {
     ...base,
     canReview: canReview && !isOwn,
     entry: {
       id: entry.id,
+      proof: proofRow ? { attached: true, attachmentId: canSeeProof ? proofRow.id : null } : { attached: false, attachmentId: null },
       receivedAt: entry.firstSubmittedAt,
       lastEditedAt: entry.revisionNo > 1 ? entry.lastSubmittedAt : null,
       revisionNo: entry.revisionNo,

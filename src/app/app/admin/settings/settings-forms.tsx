@@ -265,6 +265,7 @@ const JournalPolicyFormSchema = z.object({
   missedStreakThreshold: z.coerce.number().int().min(2, 'At least 2 days').max(30, 'At most 30 days'),
   reviewExpected: z.boolean(),
   showStreaksToLeaders: z.boolean(),
+  proofImage: z.enum(['required', 'optional', 'off']),
 });
 
 export function JournalPolicyForm({ value, canEdit }: { value: SettingValue<'journal.policy'>; canEdit: boolean }) {
@@ -289,6 +290,16 @@ export function JournalPolicyForm({ value, canEdit }: { value: SettingValue<'jou
         <SelectField id="settings-edit-window" label="Editing a sent journal" {...form.register('editWindow')} defaultValue={String(form.formState.defaultValues?.editWindow ?? '')}>
           <option value="until_deadline">Allowed from the same phone until the deadline</option>
           <option value="none">Not allowed</option>
+        </SelectField>
+        <SelectField
+          id="settings-proof"
+          label="Photo of the written journal"
+          hint="Members can photograph the notebook they wrote in. The photo is private: only people who may read the journal, and hold the proof permission, can open it."
+          {...form.register('proofImage')} defaultValue={String(form.formState.defaultValues?.proofImage ?? '')}
+        >
+          <option value="required">Required — a journal cannot be sent without one</option>
+          <option value="optional">Optional — invited, but not insisted on</option>
+          <option value="off">Not collected</option>
         </SelectField>
         <SelectField
           id="settings-visibility"

@@ -14,7 +14,9 @@ import {
 import { actorUserId, type RequestContext } from '../../context/request-context';
 import { AppError, conflict, invalidState, notFound, validationError } from '../../errors';
 import { assertCanAccessPerson } from '../../policy/can';
+import type { StoredObject } from '../../storage/storage';
 import { parseInput } from '../../validation';
+import { assertProofPresent, attachProof, discardObjects, entryHasProof } from './proof.service';
 import { recordAudit } from '../audit/audit.service';
 import { splitBySensitivity, validateAnswers, type AnswerValue, type FieldDefinition } from '../forms/answers';
 import { getFormVersion, getPublishedForm, JOURNAL_FORM_KEY, type FormVersionView } from '../forms/forms.service';
@@ -165,6 +167,8 @@ export async function getPublicJournalState(db: Database, identity: ParticipantI
     person: { firstName: person.preferredName ?? person.firstName },
     leader,
     timezone,
+    /** Whether the page asks for a photo of the written journal, and whether it insists. */
+    proofImage: policy.proofImage,
     form: { versionId: form.versionId, fields: form.fields },
     dates: dates.map((date) => {
       const entry = entries.find((e) => e.journalDate === date);
@@ -198,6 +202,8 @@ export const SubmitJournalInput = z.object({
   formVersionId: z.uuid(),
   journalDate: z.iso.date(),
   answers: z.record(z.string(), z.unknown()),
+  /** The photo of their written journal, uploaded a moment earlier (proof.service.ts). */
+  attachmentId: z.uuid().optional(),
   /** The QR code the person came through, if any. */
   entryCode: z.string().trim().max(12).optional(),
   /** They confirmed the leader behind that QR code is their leader now. */
@@ -242,9 +248,15 @@ export async function submitJournal(db: Database, identity: ParticipantIdentity,
   const answers = validate(version.fields, input.answers);
   const code = input.entryCode ? await resolveEntryCode(db, input.entryCode) : null;
   const canEdit = identity.persistent && policy.editWindow === 'until_deadline' && req.now <= deadlineInstant(input.journalDate, timezone, policy);
+  // Checked before the transaction so a member is told plainly, and again inside it by attaching
+  // the photo in the same transaction as the journal: the two are saved together or not at all.
+  assertProofPresent(policy, Boolean(input.attachmentId));
 
+  // Files a replaced photo left behind, deleted after the transaction commits (storage cannot
+  // take part in it, so the deletion waits until the journal is safely saved).
+  let discarded: StoredObject[] = [];
   try {
-    return await db.transaction(async (tx) => {
+    const receipt = await db.transaction(async (tx) => {
       const [existing] = await tx
         .select({ id: journalEntries.id, receivedAt: journalEntries.firstSubmittedAt })
         .from(journalEntries)
@@ -275,6 +287,10 @@ export async function submitJournal(db: Database, identity: ParticipantIdentity,
         submittedAt: req.now,
       });
 
+      if (input.attachmentId) {
+        discarded = await attachProof(tx, { attachmentId: input.attachmentId, personId: identity.personId, entryId: entry!.id, now: req.now });
+      }
+
       await recordDayForEntry(tx, {
         personId: identity.personId,
         journalDate: input.journalDate,
@@ -298,6 +314,8 @@ export async function submitJournal(db: Database, identity: ParticipantIdentity,
       });
       return { journalDate: input.journalDate, receivedAt: req.now, timing, revisionNo: 1, leaderName: leader?.name ?? null, leaderChangeRequested };
     });
+    await discardObjects(discarded);
+    return receipt;
   } catch (error) {
     if (isUniqueViolation(error)) {
       const [winner] = await db
@@ -317,6 +335,8 @@ export const EditJournalInput = z.object({
   formVersionId: z.uuid(),
   journalDate: z.iso.date(),
   answers: z.record(z.string(), z.unknown()),
+  /** A new photo. Leaving it out keeps the one already on the journal. */
+  attachmentId: z.uuid().optional(),
 });
 
 export async function editJournal(db: Database, identity: ParticipantIdentity, req: PublicRequest, raw: unknown): Promise<JournalReceipt> {
@@ -353,13 +373,20 @@ export async function editJournal(db: Database, identity: ParticipantIdentity, r
   const version = await acceptableVersion(db, input.formVersionId, req.now);
   const answers = validate(version.fields, input.answers);
 
-  return db.transaction(async (tx) => {
+  let discarded: StoredObject[] = [];
+  const receipt = await db.transaction(async (tx) => {
     const [entry] = await tx
       .select()
       .from(journalEntries)
       .where(and(eq(journalEntries.personId, identity.personId), eq(journalEntries.journalDate, input.journalDate)))
       .for('update');
     if (!entry) throw new AppError('NOT_FOUND', 'There is no journal to edit for this day yet.');
+    // An edit must not leave a journal without the photo the ministry requires: either one is
+    // already on it, or this edit brings a new one.
+    assertProofPresent(policy, Boolean(input.attachmentId) || (await entryHasProof(tx, entry.id)));
+    if (input.attachmentId) {
+      discarded = await attachProof(tx, { attachmentId: input.attachmentId, personId: identity.personId, entryId: entry.id, now: req.now });
+    }
     const [dayRow] = await tx
       .select({ finalizedAt: journalDays.finalizedAt })
       .from(journalDays)
@@ -402,6 +429,8 @@ export async function editJournal(db: Database, identity: ParticipantIdentity, r
       leaderChangeRequested: false,
     };
   });
+  await discardObjects(discarded);
+  return receipt;
 }
 
 // ─── Proxy submission (portal) ────────────────────────────────────────────────

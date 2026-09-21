@@ -49,6 +49,7 @@ describe('role bundles against the permission matrix (docs/06 §2 and §4)', () 
       [
         'access.break_glass', 'audit.view', 'care.pastoral.view', 'iam.roles.manage', 'iam.users.manage', 'import.manage',
         'journal.content.confidential.view', 'journal.content.restricted.view', 'journal.content.view',
+        'journal.proof.manage', 'journal.proof.view',
         'notes.pastoral.create', 'notes.pastoral.view', 'people.export', 'people.merge', 'prayer.reports.view',
         'prayer.requests.confidential.view', 'reports.export', 'settings.manage',
       ].sort(),
@@ -56,9 +57,20 @@ describe('role bundles against the permission matrix (docs/06 §2 and §4)', () 
     expect(keys.filter(isPastoral).sort()).toEqual(
       [
         'care.pastoral.view', 'journal.content.confidential.view', 'journal.content.restricted.view', 'journal.content.view',
+        'journal.proof.manage', 'journal.proof.view',
         'notes.pastoral.create', 'notes.pastoral.view', 'prayer.requests.confidential.view',
       ].sort(),
     );
+  });
+
+  it('shows a proof photo to the same people as the answers, and lets only pastors remove one (rows 15a–15b)', () => {
+    expect(holdersOf('journal.proof.view')).toEqual(['leader', 'pastor', 'pastoral_care', 'primary_leader']);
+    // A leader sees their own group's photos only, as with restricted answers.
+    for (const role of ['leader', 'primary_leader'] as const) {
+      expect(bundle(role)).toContainEqual({ key: 'journal.proof.view', depthCap: 1 });
+    }
+    // Removing one is pastoral: not a leader's, and not the Super Admin's either.
+    expect(holdersOf('journal.proof.manage')).toEqual(['pastor', 'pastoral_care']);
   });
 
   it('reads journal content only as pastors, pastoral care and leaders, with restricted answers for the direct group (rows 13–15)', () => {

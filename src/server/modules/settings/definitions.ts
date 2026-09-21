@@ -65,6 +65,12 @@ export const SETTINGS = {
         missedStreakThreshold: z.int().min(2).max(30),
         reviewExpected: z.boolean(),
         showStreaksToLeaders: z.boolean(),
+        /**
+         * Whether a member must photograph their written journal (docs/02 §4 "Journal proof").
+         * `off` hides the section entirely; `optional` invites a photo; `required` won't accept a
+         * journal without one.
+         */
+        proofImage: z.enum(['required', 'optional', 'off']),
       })
       .refine((p) => p.lateCutoffTime < '12:00', { path: ['lateCutoffTime'], message: 'Late cutoff must be before noon' }),
     defaults: {
@@ -75,6 +81,7 @@ export const SETTINGS = {
       missedStreakThreshold: 3,
       reviewExpected: true,
       showStreaksToLeaders: true,
+      proofImage: 'required' as const,
     },
   },
   'public.identification': {

@@ -64,6 +64,13 @@
       "when": 1789565367341,
       "tag": "0008_devotional",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789999772706,
+      "tag": "0009_journal_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -30,6 +30,9 @@ Object.assign(process.env, {
     ? { EMAIL_PROVIDER: 'resend', EMAIL_API_KEY: 're_e2e_not_a_real_key' }
     : { EMAIL_PROVIDER: 'file', EMAIL_OUTBOX_DIR: E2E_OUTBOX_DIR }),
   RATE_LIMIT_STORE: 'postgres',
+  // Journal proof photos land beside the test database, so they are cleared with it.
+  STORAGE_DRIVER: 'local',
+  STORAGE_DIR: `${E2E_DATA_DIR}/uploads`,
   SCHEDULER_MODE: 'off',
   SENTRY_DSN: '',
   NEXT_PUBLIC_SENTRY_DSN: '',

@@ -85,6 +85,7 @@ Every mutation writes an `audit_logs` row in the same transaction. Operations ma
 | `GET /api/public/leaders?q=` | `public.searchLeaders`; rate-limited per IP, no form session needed |
 | `POST /api/public/journal` | `journal.submit`. Takes `journalDate` (YYYY-MM-DD: today, or yesterday before the late cutoff) plus optional `entryCode` and `requestLeaderChange`. The receipt is `{ journalDate, receivedAt, timing, revisionNo, leaderName, leaderChangeRequested }`, with no receipt code |
 | `PUT /api/public/journal` | `journal.editOwn`; remembered device only, before the deadline |
+| `POST /api/public/journal/proof` | `journal.proof.upload` (2026-09-21). Multipart: `file` (JPEG/PNG/WebP ≤ 5 MB), `formSession`, `journalDate`. Identified device only, same-origin, rate limited per person and per address. Returns `{ attachmentId, width, height, bytes }`; the journal then carries `attachmentId` |
 | `GET /api/public/journal/entry?date=` | The person's own answers, to prefill an edit; remembered device only, within the edit window |
 | `POST /api/public/personal-link` | `links.installPersonalKey`; the `/k/{token}` page posts here |
 | `POST /api/public/forget` | "Use as someone else": revokes this device's key and clears the cookie |

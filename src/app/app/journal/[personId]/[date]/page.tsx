@@ -1,4 +1,4 @@
-import { Lock } from 'lucide-react';
+import { Camera, Lock } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -13,6 +13,7 @@ import { getSetting } from '@/server/modules/settings/settings.service';
 import { requirePortal } from '@/server/next/context';
 import { getDb } from '@/server/next/db';
 import { ExcuseDay } from './excuse-day';
+import { ProofView } from './proof-view';
 import { ReviewForm } from './review-form';
 
 export const metadata: Metadata = { title: 'Journal' };
@@ -117,6 +118,23 @@ export default async function JournalEntryPage({ params }: { params: Promise<{ p
                 </Link>{' '}
                 to read journal answers.
               </Alert>
+            )}
+
+            {entry.proof.attached && (
+              <div className="space-y-2 border-t border-line pt-4">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-muted">
+                  <Camera aria-hidden className="size-4" /> Journal Proof
+                </h3>
+                {entry.proof.attachmentId ? (
+                  <ProofView attachmentId={entry.proof.attachmentId} personName={view.person.name} />
+                ) : (
+                  <p className="text-sm text-muted">
+                    {sensitiveLocked
+                      ? 'The photo unlocks once you turn on two-step verification.'
+                      : 'A photo of the written journal was sent. It is kept for this person’s direct leader and pastors.'}
+                  </p>
+                )}
+              </div>
             )}
           </section>
 

@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import type { AnswerValue, FieldDefinition } from '@/server/modules/forms/answers';
 import { callApi, newIdempotencyKey, publicInputClass, publicTextareaClass, type ApiResult } from '../_lib/public-api';
+import { ProofUpload, type ProofState } from './proof-upload';
 
 // ─── Types mirroring /api/public/journal ──────────────────────────────────────
 
@@ -36,6 +37,8 @@ interface Participant {
   leaderName: string | null;
   rememberedDevice: boolean;
   timezone: string;
+  /** Whether a photo of the written journal is asked for, and whether it is insisted on. */
+  proofImage: 'required' | 'optional' | 'off';
   form: { versionId: string; fields: FieldDefinition[] };
   dates: OpenDate[];
 }
@@ -841,6 +844,8 @@ function QuestionsForm({
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const idempotencyKey = useRef<string | null>(null);
+  const [proof, setProof] = useState<ProofState>({ attachmentId: null, uploading: false });
+  const proofRequired = participant.proofImage === 'required';
 
   const update = (key: string, value: RawValue) => {
     const next = { ...answers, [key]: value };
@@ -850,6 +855,12 @@ function QuestionsForm({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // An edit keeps the photo already on the journal, so only a new journal has to have one here.
+    if (proofRequired && !proof.attachmentId && mode === 'new') {
+      setFieldErrors((old) => ({ ...old, proof: ['A photo of your written journal is needed.'] }));
+      setMessage('Please add a photo of your written journal before sending it.');
+      return;
+    }
     startTransition(async () => {
       setMessage(null);
       // One key per journal attempt: a retry after a lost connection can't create a second entry.
@@ -862,6 +873,7 @@ function QuestionsForm({
           journalDate: date,
           answers: pickAnswers(fields, answers),
           formSession,
+          ...(proof.attachmentId ? { attachmentId: proof.attachmentId } : {}),
           ...(mode === 'new' ? { entryCode: entryCode ?? undefined, requestLeaderChange } : {}),
         }),
       );
@@ -912,10 +924,23 @@ function QuestionsForm({
           onChange={(value) => update(field.key, value)}
         />
       ))}
+      {participant.proofImage !== 'off' && (
+        <ProofUpload
+          required={proofRequired && mode === 'new'}
+          withSession={withSession}
+          journalDate={date}
+          error={fieldErrors.proof}
+          onChange={(state) => {
+            setProof(state);
+            if (state.attachmentId) setFieldErrors(({ proof: _removed, ...rest }) => rest);
+          }}
+        />
+      )}
       {requestLeaderChange && mode === 'new' && <Alert tone="info">We’ll ask your leaders to update who your leader is.</Alert>}
       {message && <Alert tone="error">{message}</Alert>}
       <div className="space-y-3">
-        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+        {/* Sending is held while the photo is still going up, so one tap can't outrun it. */}
+        <Button type="submit" size="lg" className="w-full" disabled={pending || proof.uploading}>
           {pending ? (
             <>
               <Loader2 aria-hidden className="size-5 animate-spin" /> Sending…
