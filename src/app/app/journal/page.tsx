@@ -462,18 +462,19 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
           </ul>
 
           <div className="hidden overflow-x-auto rounded-[var(--radius-card)] border border-line bg-surface md:block">
-            <table className="w-full min-w-[860px] text-left text-sm">
+            <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="border-b border-line text-xs uppercase tracking-wider text-muted">
                 <tr>
                   {sortable('Name', 'name')}
                   <th scope="col" className="px-4 py-3 font-semibold">
                     Role
                   </th>
-                  <th scope="col" className="px-4 py-3 font-semibold">
+                  {/* The two columns a narrow window can live without: the phone cards keep both. */}
+                  <th scope="col" className="hidden px-4 py-3 font-semibold lg:table-cell">
                     Ministry
                   </th>
                   {sortable(isToday ? 'Today' : formatDayLabel(overview.date, 'short'), 'status')}
-                  {sortable('Leader', 'leader')}
+                  {sortable('Leader', 'leader', 'hidden px-4 py-3 font-semibold lg:table-cell')}
                   {showProof && (
                     <th scope="col" className="px-4 py-3 font-semibold">
                       Photo
@@ -504,7 +505,7 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
                       </span>
                     </td>
                     <td className="px-4 py-3 text-muted">{ROLE_LABEL[p.role]}</td>
-                    <td className="px-4 py-3 text-muted">{p.ministryName ?? '—'}</td>
+                    <td className="hidden px-4 py-3 text-muted lg:table-cell">{p.ministryName ?? '—'}</td>
                     <td className="px-4 py-3">
                       <JournalStatus status={p.status} />
                       <p className="text-xs text-muted">
@@ -515,7 +516,7 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
                             : null}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-muted">{p.leaderName ?? '—'}</td>
+                    <td className="hidden px-4 py-3 text-muted lg:table-cell">{p.leaderName ?? '—'}</td>
                     {/* Only that a photo is there. It is fetched when the journal is opened. */}
                     {showProof && (
                       <td className="px-4 py-3">
