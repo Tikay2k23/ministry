@@ -26,13 +26,25 @@ Object.assign(process.env, {
   APP_ENCRYPTION_KEY: 'e2e-only-encryption-key-not-used-elsewhere-00',
   DATABASE_URL: databaseUrl,
   DATABASE_URL_MIGRATOR: databaseUrl,
+  // A production build refuses test email and local file storage, as it should. The security scan
+  // only reads pages, so it gets credentials that are real enough to start and never used, the
+  // same way the email provider is handled.
   ...(production
-    ? { EMAIL_PROVIDER: 'resend', EMAIL_API_KEY: 're_e2e_not_a_real_key' }
-    : { EMAIL_PROVIDER: 'file', EMAIL_OUTBOX_DIR: E2E_OUTBOX_DIR }),
+    ? {
+        EMAIL_PROVIDER: 'resend',
+        EMAIL_API_KEY: 're_e2e_not_a_real_key',
+        STORAGE_DRIVER: 'supabase',
+        SUPABASE_URL: 'https://e2e-not-a-real-project.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'e2e-not-a-real-service-role-key',
+      }
+    : {
+        EMAIL_PROVIDER: 'file',
+        EMAIL_OUTBOX_DIR: E2E_OUTBOX_DIR,
+        // Journal proof photos land beside the test database, so they are cleared with it.
+        STORAGE_DRIVER: 'local',
+        STORAGE_DIR: `${E2E_DATA_DIR}/uploads`,
+      }),
   RATE_LIMIT_STORE: 'postgres',
-  // Journal proof photos land beside the test database, so they are cleared with it.
-  STORAGE_DRIVER: 'local',
-  STORAGE_DIR: `${E2E_DATA_DIR}/uploads`,
   SCHEDULER_MODE: 'off',
   SENTRY_DSN: '',
   NEXT_PUBLIC_SENTRY_DSN: '',
