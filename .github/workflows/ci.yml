@@ -186,25 +186,36 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
 
-      # This job has been killed mid-run three times with every test passing locally. A runner holds
-      # Chromium, `next dev` and an embedded PostgreSQL at once, so running out of memory is the
-      # likely cause; these lines say so plainly instead of leaving "exit code 143".
+      # Kept, so the step below can say where the run had got to. Job logs need authentication to
+      # read; annotations don't.
+      - name: Run the end-to-end tests
+        run: |
+          set -o pipefail
+          npm run test:e2e 2>&1 | tee e2e.log
+
+      # This job has been killed mid-run three times with every test passing locally, and each time
+      # the log said only "The operation was canceled". A runner holds Chromium, `next dev` and an
+      # embedded PostgreSQL at once, so running out of memory is the first suspect — but the point
+      # of this step is to stop guessing.
       #
-      # A kill arrives as a *cancellation*, not a failure, so `if: failure()` skipped this step on
-      # exactly the runs that needed it — which is why the last one said only "The operation was
-      # canceled".
+      # `if: failure()` is not enough: a killed step is *cancelled*, which is neither failure() nor
+      # cancelled() (that one means the whole run was cancelled). `!success()` covers both.
       - name: Why did it stop?
-        if: failure() || cancelled()
+        if: ${{ !success() }}
         run: |
           echo "::notice title=E2E memory::$(free -m | sed -n 2p)"
           echo "::notice title=E2E disk::$(df -h / | sed -n 2p)"
+          if [ -f e2e.log ]; then
+            echo "::error title=E2E stopped here::$(tail -40 e2e.log | tr '\n' ' ' | cut -c1-3000)"
+          else
+            echo "::error title=E2E stopped here::the run produced no output at all"
+          fi
           killed="$(sudo dmesg 2>/dev/null | grep -i 'killed process' | tail -3)"
           if [ -n "$killed" ]; then echo "::error title=E2E killed by the kernel::$killed"; fi
 
       - uses: actions/upload-artifact@v4
-        if: failure() || cancelled()
+        if: ${{ !success() }}
         with:
           name: playwright-report
           path: playwright-report
