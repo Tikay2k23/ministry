@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A new push cancels the run before it. That is what we want — but note that the end-to-end job
+# takes two to three times as long as any other, so it is the one still running when the next push
+# lands, and the only one that ever appears to "fail" because of it. Such a run says so:
+# "Canceling since a higher priority waiting request ... exists". That is not a test failure.
+#
+# An end-to-end job that exits 143 *without* that line is the other thing: see the ceiling below.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -175,9 +181,9 @@ jobs:
           echo "✓ every counted table matches"
 
   e2e:
-    # One runner per project. The two dev servers compile half the pages each, and this job has
-    # been killed outright five times in a row with every test passing locally — always around
-    # three minutes in, which is when the second project's pages start compiling.
+    # One runner per project: two dev servers compiling half the pages each, and a portal failure
+    # that no longer hides a public one. It also shortens the job, which matters because this is
+    # the one long enough to be caught by the next push's cancellation.
     name: End-to-end tests (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -194,10 +200,17 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      # The diagnosis is inside this step, not after it. A job being torn down skips every later
-      # step whatever its condition — `always()` included — which is how four attempts at a
-      # separate post-mortem step never once ran. A trap in the step's own shell still fires.
+      # The diagnosis is inside this step, not after it: a trap in the step's own shell fires even
+      # when the job is being cancelled, where a later step is skipped. It stays quiet on success.
+      #
+      # The heap ceiling is not a guess. Without it the kernel killed the run outright:
+      #   Out of memory: Killed process (next-server) total-vm:50380572kB anon-rss:14939964kB
+      # — `next dev` had reached 14.9 GB on a 16 GB runner while compiling the public pages. A
+      # ceiling makes V8 collect instead of asking for more, and if something ever really does leak
+      # this much again it fails as a heap error naming itself rather than taking the machine down.
       - name: Run the end-to-end tests
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           set -o pipefail
           report() {
