@@ -89,12 +89,16 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
     await mobile.getByRole('button', { name: 'Choose this hour' }).first().click();
     await mobile.getByRole('button', { name: 'Confirm this hour' }).click();
 
-    // They already have one, so they are offered the choice rather than given two.
+    // What follows depends on whether the hour they were given is still ahead of them, which
+    // depends on the hour of the day the run happens to start — so this asks only that the page
+    // answered at all. Which answer is right for which case is settled in the integration tests
+    // (tests/integration/prayer.test.ts, "offers to keep or move an hour").
+    const offeredTheChoice = mobile.getByText('You already have an hour in this chain');
     await waitAndExplain(
-      () => expect(mobile.getByText('You already have an hour in this chain')).toBeVisible(),
-      async () => explain(await firstAlert(mobile), 'taking the hour was refused', 'the page neither offered the choice nor said why'),
+      () => expect(offeredTheChoice.or(mobile.getByText(/is yours/))).toBeVisible(),
+      async () => explain(await firstAlert(mobile), 'taking the hour was refused', await pageSaid(mobile)),
     );
-    await mobile.getByRole('button', { name: /^Keep / }).click();
+    if (await offeredTheChoice.isVisible()) await mobile.getByRole('button', { name: /^Keep / }).click();
     await expect(mobile.getByRole('heading', { name: 'The hours' })).toBeVisible();
   } finally {
     await phone.close();
@@ -123,6 +127,12 @@ ${(error as Error).message}` : (error as Error).message);
 }
 
 const explain = (message: string, refused: string, silence: string) => (message ? `${refused}: ${message}` : silence);
+
+/** When the page says nothing in an alert, say what it does show, so a silent failure is readable. */
+async function pageSaid(page: Page): Promise<string> {
+  const text = await page.locator('main').innerText().catch(() => '');
+  return `the page answered nothing; it showed: ${text.replace(/\s+/g, ' ').trim().slice(0, 400)}`;
+}
 
 async function firstAlert(within: Locator | Page): Promise<string> {
   const alert = within.getByRole('alert').or(within.getByRole('status'));
