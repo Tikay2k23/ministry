@@ -241,13 +241,17 @@ export default async function JournalTodayPage({ searchParams }: { searchParams:
                   ? 'Your group'
                   : overview.leader.name}
             </span>
+            {/* A switch, not another crumb — on a phone this wraps onto its own line. */}
+            <span aria-hidden className="ml-1 text-muted">
+              ·
+            </span>
             <Link
               href={href({ view: overview.view === 'branch' ? 'direct' : 'branch' })}
-              className="ml-2 text-brand-deep hover:underline"
+              className="text-brand-deep hover:underline"
             >
               {overview.view === 'branch'
-                ? `just ${overview.leader.isSelf ? 'your' : 'their'} group`
-                : `${overview.leader.isSelf ? 'your' : 'their'} whole branch`}
+                ? `show just ${overview.leader.isSelf ? 'your' : 'their'} group`
+                : `show ${overview.leader.isSelf ? 'your' : 'their'} whole branch`}
             </Link>
           </>
         )}
