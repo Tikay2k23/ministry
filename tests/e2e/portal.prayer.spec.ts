@@ -90,7 +90,10 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
     await mobile.getByRole('button', { name: 'Confirm this hour' }).click();
 
     // They already have one, so they are offered the choice rather than given two.
-    await expect(mobile.getByText('You already have an hour in this chain')).toBeVisible();
+    await waitAndExplain(
+      () => expect(mobile.getByText('You already have an hour in this chain')).toBeVisible(),
+      async () => explain(await firstAlert(mobile), 'taking the hour was refused', 'the page neither offered the choice nor said why'),
+    );
     await mobile.getByRole('button', { name: /^Keep / }).click();
     await expect(mobile.getByRole('heading', { name: 'The hours' })).toBeVisible();
   } finally {
