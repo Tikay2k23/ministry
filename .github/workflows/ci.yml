@@ -175,9 +175,16 @@ jobs:
           echo "✓ every counted table matches"
 
   e2e:
-    name: End-to-end tests (Playwright)
+    # One runner per project. The two dev servers compile half the pages each, and this job has
+    # been killed outright five times in a row with every test passing locally — always around
+    # three minutes in, which is when the second project's pages start compiling.
+    name: End-to-end tests (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [portal, public]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -187,43 +194,31 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      # Kept, so the step below can say where the run had got to. Job logs need authentication to
-      # read; annotations don't.
-      #
-      # The heap ceiling is for `next dev`: Turbopack will grow until the machine complains, and
-      # this job has been killed outright four times — every step after it, including the post
-      # steps that always run, marked skipped, which only happens when the runner itself goes away.
-      # A ceiling makes it collect garbage instead of asking for more.
+      # The diagnosis is inside this step, not after it. A job being torn down skips every later
+      # step whatever its condition — `always()` included — which is how four attempts at a
+      # separate post-mortem step never once ran. A trap in the step's own shell still fires.
       - name: Run the end-to-end tests
-        id: e2e
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           set -o pipefail
-          npm run test:e2e 2>&1 | tee e2e.log
-
-      # When the job survives long enough to run this, it says what the machine looked like and
-      # where the run had reached. One run that did reach it showed 12.5 GB free, which is what
-      # ruled memory out as the whole story.
-      #
-      # `always()` and nothing less: a job that is being torn down skips every step whose condition
-      # is anything else, which is how the first four of these kills left no explanation at all.
-      - name: Why did it stop?
-        if: ${{ always() && steps.e2e.outcome != 'success' }}
-        run: |
-          echo "::notice title=E2E memory::$(free -m | sed -n 2p)"
-          echo "::notice title=E2E disk::$(df -h / | sed -n 2p)"
-          if [ -f e2e.log ]; then
-            echo "::error title=E2E stopped here::$(tail -40 e2e.log | tr '\n' ' ' | cut -c1-3000)"
-          else
-            echo "::error title=E2E stopped here::the run produced no output at all"
-          fi
-          killed="$(sudo dmesg 2>/dev/null | grep -i 'killed process' | tail -3)"
-          if [ -n "$killed" ]; then echo "::error title=E2E killed by the kernel::$killed"; fi
+          report() {
+            code=$?
+            [ "$code" = 0 ] && return 0
+            echo "::notice title=E2E memory (${{ matrix.project }})::$(free -m | sed -n 2p)"
+            echo "::notice title=E2E disk (${{ matrix.project }})::$(df -h / | sed -n 2p)"
+            if [ -s e2e.log ]; then
+              echo "::error title=E2E stopped here (${{ matrix.project }})::exit $code — $(tail -30 e2e.log | tr -d '\r' | tr '\n' ' ' | cut -c1-2500)"
+            else
+              echo "::error title=E2E stopped here (${{ matrix.project }})::exit $code — the run produced no output at all"
+            fi
+            killed="$(sudo dmesg 2>/dev/null | grep -i 'killed process' | tail -3)"
+            if [ -n "$killed" ]; then echo "::error title=E2E killed by the kernel::$killed"; fi
+          }
+          trap report EXIT TERM INT
+          npm run test:e2e -- --project=${{ matrix.project }} 2>&1 | tee e2e.log
 
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && steps.e2e.outcome != 'success' }}
+        if: ${{ always() }}
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: playwright-report
           retention-days: 7
