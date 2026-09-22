@@ -36,7 +36,10 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
   await assign.getByRole('button', { name: new RegExp(memberName) }).click();
   // The dialog closes when the assignment is saved. If it doesn't, the reason is on screen —
   // report it, rather than leaving a bare 'still visible' 20 seconds later.
-  await expect(assign, await assignmentProblem(assign)).toBeHidden();
+  await waitAndExplain(
+    () => expect(assign).toBeHidden(),
+    async () => explain(await firstAlert(assign), 'assigning was refused', 'the assign dialog never closed, and showed no message'),
+  );
   await expect(page.getByText('Upcoming', { exact: true })).toBeVisible();
 
   // The coordinator shares the member's personal link.
@@ -65,7 +68,12 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
     await mobile.getByLabel('First name').fill(E2E_MEMBER.firstName);
     await mobile.waitForTimeout(HUMAN_PAUSE_MS);
     await mobile.getByRole('button', { name: 'Continue' }).click();
-    await expect(mobile.getByRole('heading', { name: `Hello, ${E2E_MEMBER.firstName}!` }), await identifyProblem(mobile)).toBeVisible();
+    // The first visit to this page in a run compiles it and its API route, which on a cold CI
+    // runner takes longer than the usual twenty seconds.
+    await waitAndExplain(
+      () => expect(mobile.getByRole('heading', { name: `Hello, ${E2E_MEMBER.firstName}!` })).toBeVisible({ timeout: 60_000 }),
+      async () => explain(await firstAlert(mobile), 'identifying was refused', 'the chain page did not recognise the member, and showed no message'),
+    );
     await expect(mobile.getByText('Confirmed — thank you!')).toBeVisible();
     // Hours are the coordinator's to give until they say otherwise.
     await expect(mobile.getByText('arranged by the prayer coordinator')).toBeVisible();
@@ -96,20 +104,25 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
 
 /**
  * What the page says when a step doesn't go through — a rate limit, a validation message, a server
- * error — so a failure here names its cause instead of only the element that never appeared.
+ * error — so a failure here names its cause instead of only the element that never appeared. The
+ * page is read **after** the wait fails: a message passed to `expect` is read before it, when the
+ * request is still in flight and the page has nothing to say yet.
  */
-async function assignmentProblem(dialog: Locator): Promise<string> {
-  const message = await firstAlert(dialog);
-  return message ? `assigning was refused: ${message}` : 'the assign dialog never closed, and showed no message';
+async function waitAndExplain(wait: () => Promise<void>, read: () => Promise<string>): Promise<void> {
+  try {
+    await wait();
+  } catch (error) {
+    const said = await read().catch(() => '');
+    throw new Error(said ? `${said}
+
+${(error as Error).message}` : (error as Error).message);
+  }
 }
 
-async function identifyProblem(page: Page): Promise<string> {
-  const message = await firstAlert(page);
-  return message ? `identifying was refused: ${message}` : 'the chain page did not recognise the member, and showed no message';
-}
+const explain = (message: string, refused: string, silence: string) => (message ? `${refused}: ${message}` : silence);
 
 async function firstAlert(within: Locator | Page): Promise<string> {
-  const alert = within.getByRole('alert');
+  const alert = within.getByRole('alert').or(within.getByRole('status'));
   if ((await alert.count()) === 0) return '';
   return (await alert.first().innerText().catch(() => '')).trim();
 }

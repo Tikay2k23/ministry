@@ -80,17 +80,20 @@ export function PrayerChainApp({ code }: { code: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const apply = useCallback((result: ApiResult<ChainPageData>) => {
+  const apply = useCallback((result: ApiResult<ChainPageData>): boolean => {
     if (!result.ok) {
+      // Nothing on screen yet, or something already on it: one of these two is read.
       setLoadError(result.error.message);
-      return;
+      setProblem(result.error.message);
+      return false;
     }
     setPage(result.data);
     setLoadError(null);
+    return true;
   }, []);
 
   const load = useCallback(
-    async (on: string | null) => apply(await fetchChainPage(code, on, false)),
+    async (on: string | null): Promise<boolean> => apply(await fetchChainPage(code, on, false)),
     [apply, code],
   );
 
@@ -203,7 +206,8 @@ export function PrayerChainApp({ code }: { code: string }) {
         }}
         onConfirm={(slot, replaceAssignmentId) => claim(slot, replaceAssignmentId)}
         onIdentified={async (slot) => {
-          await load(date);
+          // If the refresh fails, the message is already on screen: stay put rather than show a stale day.
+          if (!(await load(date))) return;
           // Straight to the hour they picked, or back to the day if they were only looking for their own.
           setScreen(slot ? { kind: 'confirm', slot } : { kind: 'browse' });
         }}

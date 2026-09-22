@@ -166,8 +166,9 @@ describe('sending a journal with its photo', () => {
     // Nothing in the path identifies the person to anyone who sees it.
     expect(row!.storagePath).toMatch(/^[0-9a-f-]{36}\/2026-09-15\/[0-9a-f-]{36}\.webp$/);
     expect(row!.storagePath).not.toContain('John');
-    expect(row!.storagePath).not.toContain('0917');
-    expect(row!.storagePath).not.toContain('555');
+    for (const written of ['+639175550143', '639175550143', '09175550143', '9175550143']) {
+      expect(row!.storagePath).not.toContain(written);
+    }
 
     await submitJournal(db, who, req(now), { idempotencyKey: randomUUID(), formVersionId: versionId, journalDate: '2026-09-15', answers, attachmentId: uploaded.attachmentId });
 
