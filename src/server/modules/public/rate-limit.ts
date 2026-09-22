@@ -29,6 +29,9 @@ export const RATE_LIMITS = {
   leaderSearchPerIp: { limit: 60, windowSeconds: 60 },
   personalLinkPerIp: { limit: 10, windowSeconds: 15 * 60 },
   prayerRespondPerIp: { limit: 60, windowSeconds: 15 * 60 },
+  /** Taking an hour is a write, so it is held tighter than reading or confirming one. */
+  prayerClaimPerIp: { limit: 20, windowSeconds: 15 * 60 },
+  prayerClaimPerPerson: { limit: 10, windowSeconds: 60 * 60 },
   prayerReportPerIp: { limit: 10, windowSeconds: 60 * 60 },
   servingRespondPerIp: { limit: 60, windowSeconds: 15 * 60 },
 } satisfies Record<string, RateLimitRule>;

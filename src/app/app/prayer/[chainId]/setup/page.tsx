@@ -164,6 +164,7 @@ export default async function ChainSetupPage({ params }: { params: Promise<{ cha
                   checkinOpensMinutes: chain.checkinOpensMinutes,
                   requireCheckin: chain.requireCheckin,
                   showNamesPublicly: chain.showNamesPublicly,
+                  allowSelfSignup: chain.allowSelfSignup,
                   collectsReports: chain.collectsReports,
                 }}
                 ministries={ministryChoices}

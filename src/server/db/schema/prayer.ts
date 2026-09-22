@@ -53,6 +53,8 @@ export const prayerChains = pgTable(
     requireCheckin: boolean('require_checkin').notNull().default(false),
     /** The public chain page may show first names of who is praying now. */
     showNamesPublicly: boolean('show_names_publicly').notNull().default(false),
+    /** People may take an open hour themselves from the chain page (docs/05 W11 self sign-up). */
+    allowSelfSignup: boolean('allow_self_signup').notNull().default(false),
     /** NULL = no report form after completing a slot. */
     reportFormId: uuid('report_form_id').references((): AnyPgColumn => forms.id),
     archivedAt: tstz('archived_at'),

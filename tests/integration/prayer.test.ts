@@ -16,9 +16,10 @@ import {
   substituteAssignment,
   suggestSubstitutes,
 } from '@/server/modules/prayer/assignments.service';
-import { createChain, setChainStatus } from '@/server/modules/prayer/chains.service';
+import { createChain, setChainStatus, updateChain } from '@/server/modules/prayer/chains.service';
 import { coordinatorUserIds } from '@/server/modules/prayer/coordinators.service';
 import {
+  claimSlot,
   getChainPage,
   getSlotByActionLink,
   respondFromChainPage,
@@ -66,6 +67,23 @@ const coordinatorOf = (forChainId: string, now: Date): RequestContext =>
     COORDINATOR.map((permission): Grant => ({ permission, scope: { type: 'prayer_chain', chainId: forChainId }, roleKey: 'prayer_coordinator' })),
     now,
   );
+
+/** Everything updateChain needs, so a test can change one switch without rewriting the chain. */
+const chainSettings = {
+  get chainId() {
+    return chainId;
+  },
+  name: 'Night and Day',
+  chainType: 'continuous' as const,
+  timezone: TZ,
+  startsOn: '2026-09-20',
+  graceMinutes: 15,
+  checkinOpensMinutes: 15,
+  requireCheckin: false,
+  showNamesPublicly: false,
+  allowSelfSignup: false,
+  collectReports: true,
+};
 
 async function slotAt(date: string, time: string, forChainId = chainId) {
   const [slot] = await db
@@ -396,5 +414,88 @@ describe('prayer chain (M3)', () => {
     expect(own.chains.map((c) => c.name)).toEqual(['Friday Vigil']);
     expect(own.chain?.id).toBe(vigilChainId);
     await expect(getPrayerCompletionReport(db, office(now), {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('lets someone take an open hour for themselves, once the coordinator opens the chain', async () => {
+    const now = at('2026-09-21', '09:00');
+    const key = await issueParticipantKey(db, { personId: world.ids.grace, createdVia: 'phone_match', persistent: true, now, userAgent: null });
+    const grace = (await resolveParticipantKey(db, key.secret, now))!;
+    const free = await slotAt('2026-09-22', '05:00');
+
+    // Off by default: hours are the coordinator's to give until they say otherwise.
+    expect(await failure(claimSlot(db, grace, req(now), { code: chainCode, slotId: free.id }))).toMatchObject({ code: 'INVALID_STATE' });
+
+    await updateChain(db, office(now), { ...chainSettings, allowSelfSignup: true });
+    const taken = await claimSlot(db, grace, req(now), { code: chainCode, slotId: free.id });
+    if (taken.result !== 'claimed') throw new Error('Expected Grace to take the hour');
+    expect(taken.slot).toMatchObject({ state: 'upcoming', primaryAction: 'confirm' });
+
+    const [row] = await db.select().from(prayerAssignments).where(eq(prayerAssignments.slotId, free.id));
+    expect(row).toMatchObject({ personId: world.ids.grace, source: 'self_signup', createdBy: null });
+    const [event] = await db.select().from(prayerAssignmentEvents).where(eq(prayerAssignmentEvents.assignmentId, row!.id));
+    expect(event).toMatchObject({ eventType: 'assigned', actorType: 'participant', via: 'chain_page' });
+    const [logged] = await db.select().from(auditLogs).where(eq(auditLogs.action, 'prayer.self_signed_up'));
+    expect(logged).toMatchObject({ entityId: chainId, actorPersonId: world.ids.grace });
+  });
+
+  it('refuses an hour that is full, already passed, or clashes with another chain', async () => {
+    const now = at('2026-09-21', '09:00');
+    const key = await issueParticipantKey(db, { personId: world.ids.anna, createdVia: 'phone_match', persistent: true, now, userAgent: null });
+    const anna = (await resolveParticipantKey(db, key.secret, now))!;
+
+    const graceHour = await slotAt('2026-09-22', '05:00');
+    expect(await failure(claimSlot(db, anna, req(now), { code: chainCode, slotId: graceHour.id }))).toMatchObject({ code: 'CONFLICT', reason: 'CAPACITY_FULL' });
+
+    const past = await slotAt('2026-09-20', '02:00');
+    expect(await failure(claimSlot(db, anna, req(now), { code: chainCode, slotId: past.id }))).toMatchObject({ code: 'CONFLICT', reason: 'SLOT_CLOSED' });
+
+    // An hour in a different chain can't be reached with this chain's code.
+    const vigilSlot = await slotAt('2026-09-20', '02:30', vigilChainId);
+    expect(await failure(claimSlot(db, anna, req(now), { code: chainCode, slotId: vigilSlot.id }))).toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('offers to keep or move an hour rather than quietly giving someone two', async () => {
+    const now = at('2026-09-21', '09:00');
+    const key = await issueParticipantKey(db, { personId: world.ids.grace, createdVia: 'phone_match', persistent: true, now, userAgent: null });
+    const grace = (await resolveParticipantKey(db, key.secret, now))!;
+    const held = await slotAt('2026-09-22', '05:00');
+    const wanted = await slotAt('2026-09-22', '21:00');
+
+    const again = await claimSlot(db, grace, req(now), { code: chainCode, slotId: wanted.id });
+    if (again.result !== 'already_assigned') throw new Error('Expected Grace to be told she already has an hour');
+    expect(again.current.slotLabel).toContain('5:00 AM');
+
+    const [before] = await db.select().from(prayerAssignments).where(eq(prayerAssignments.slotId, held.id));
+    const moved = await claimSlot(db, grace, req(now), { code: chainCode, slotId: wanted.id, replaceAssignmentId: before!.id });
+    expect(moved.result).toBe('claimed');
+    expect((await assignment(before!.id)).status).toBe('cancelled');
+    const [after] = await db.select().from(prayerAssignments).where(eq(prayerAssignments.slotId, wanted.id));
+    expect(after).toMatchObject({ personId: world.ids.grace, status: 'scheduled', source: 'self_signup' });
+  });
+
+  it('shows every hour of the day publicly, without saying who unless the chain allows it', async () => {
+    const now = at('2026-09-22', '05:30');
+    const page = await getChainPage(db, { code: chainCode, date: '2026-09-22' }, null, now);
+    if (page.status !== 'ok') throw new Error('Expected the chain page');
+    const { schedule } = page;
+
+    expect(schedule).toMatchObject({ date: '2026-09-22', previousDate: '2026-09-21', nextDate: '2026-09-23', selfSignup: true });
+    expect(schedule.slots).toHaveLength(24);
+    expect(schedule.summary.total).toBe(24);
+    expect(schedule.summary.available + schedule.summary.covered + schedule.summary.unfilled).toBe(24);
+
+    const fiveAm = schedule.slots.find((slot) => slot.startsAt.getTime() === at('2026-09-22', '05:00').getTime())!;
+    // Grace moved away from it and it is running right now, so anyone could still take it.
+    expect(fiveAm).toMatchObject({ state: 'open_now', claimable: true, names: null });
+    const nineAm = schedule.slots.find((slot) => slot.startsAt.getTime() === at('2026-09-22', '09:00').getTime())!;
+    expect(nineAm).toMatchObject({ state: 'available', claimable: true, placesLeft: 1 });
+    const ninePm = schedule.slots.find((slot) => slot.startsAt.getTime() === at('2026-09-22', '21:00').getTime())!;
+    expect(ninePm).toMatchObject({ state: 'reserved', claimable: false, names: null, mine: false });
+
+    // Only when the coordinator publishes them, and only first names.
+    await updateChain(db, office(now), { ...chainSettings, allowSelfSignup: true, showNamesPublicly: true });
+    const named = await getChainPage(db, { code: chainCode, date: '2026-09-22' }, null, now);
+    if (named.status !== 'ok') throw new Error('Expected the chain page');
+    expect(named.schedule.slots.find((slot) => slot.startsAt.getTime() === at('2026-09-22', '21:00').getTime())?.names).toEqual(['Grace']);
   });
 });

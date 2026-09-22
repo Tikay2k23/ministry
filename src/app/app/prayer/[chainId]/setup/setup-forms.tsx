@@ -529,6 +529,7 @@ export interface ChainDetails {
   checkinOpensMinutes: number;
   requireCheckin: boolean;
   showNamesPublicly: boolean;
+  allowSelfSignup: boolean;
   collectsReports: boolean;
 }
 
@@ -559,6 +560,7 @@ export function EditChainForm({
       checkinOpensMinutes: chain.checkinOpensMinutes,
       requireCheckin: chain.requireCheckin,
       showNamesPublicly: chain.showNamesPublicly,
+      allowSelfSignup: chain.allowSelfSignup,
       collectReports: chain.collectsReports,
     },
     action: (values) => updateChainAction({ chainId: chain.id, ...values }),

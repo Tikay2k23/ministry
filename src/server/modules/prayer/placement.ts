@@ -21,14 +21,14 @@ export async function placeAssignment(
   input: {
     slotId: string;
     personId: string;
-    source: 'commitment' | 'manual' | 'substitute';
+    source: 'commitment' | 'manual' | 'substitute' | 'self_signup';
     commitmentId?: string;
     substituteForId?: string;
     /** Substitutes added after a slot started don't displace the original (docs/05 W14 step 4). */
     ignoreCapacity?: boolean;
     createdBy: string | null;
     actor: EventActor;
-    via: 'portal' | 'job';
+    via: 'portal' | 'job' | 'chain_page';
     now: Date;
     note?: string | null;
   },

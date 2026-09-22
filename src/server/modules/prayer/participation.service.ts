@@ -10,12 +10,15 @@ import { parseInput } from '../../validation';
 import { splitBySensitivity, validateAnswers, type FieldDefinition } from '../forms/answers';
 import { getPublishedForm } from '../forms/forms.service';
 import { queueNotification } from '../notifications/notifications.service';
+import { recordAudit } from '../audit/audit.service';
+import { addDays } from '../journal/journal-dates';
 import { recordEntryCodeScan, resolveEntryCode } from '../public/entry-codes.service';
-import type { ParticipantIdentity, PublicRequest } from '../public/public-request';
+import { participantContext, type ParticipantIdentity, type PublicRequest } from '../public/public-request';
 import { assertRateLimit, RATE_LIMITS } from '../public/rate-limit';
-import { recordPrayerTokenUse, resolvePrayerActionToken } from './action-links.service';
+import { recordPrayerTokenUse, resolvePrayerActionToken, revokeAssignmentLinks } from './action-links.service';
 import { todayCoverage } from './chains.service';
-import { closePrayerFollowUp, recordPrayerEvent, type ChainRow } from './common';
+import { chainToday, closePrayerFollowUp, loadChain, recordPrayerEvent, type ChainRow } from './common';
+import { HOLDS_PLACE, placeAssignment, type PlacementFailure } from './placement';
 import { coordinatorUserIds } from './coordinators.service';
 import { CANNOT_MAKE_IT_LABELS, CANNOT_MAKE_IT_REASONS } from './participant-options';
 import { actionWindow, isLateCompletion, primaryAction, type AssignmentTiming } from './windows';
@@ -189,7 +192,105 @@ async function slotsForPerson(executor: Executor, chain: ChainRow, personId: str
   return slots;
 }
 
-export const ChainPageInput = z.object({ code: z.string().trim().min(1).max(20), scan: z.boolean().default(false) });
+/**
+ * How one hour reads on a page anyone can open. Nothing here is a judgement on a person: an hour
+ * that ended without anyone marking it finished is "covered", not "missed" — under BR-PR-04 only a
+ * coordinator decides that, and they do it on the board, not in public.
+ */
+export type PublicSlotState = 'available' | 'open_now' | 'praying' | 'reserved' | 'completed' | 'covered' | 'unfilled';
+
+export interface PublicSlot {
+  id: string;
+  label: string;
+  startsAt: Date;
+  endsAt: Date;
+  state: PublicSlotState;
+  /** Whether it can still be taken — capacity decides this as much as the state does. */
+  claimable: boolean;
+  placesLeft: number;
+  capacity: number;
+  /** First names, and only when the chain publishes them. Never a surname on a page anyone can open. */
+  names: string[] | null;
+  /** This device's person holds it. */
+  mine: boolean;
+}
+
+async function publicSchedule(executor: Executor, chain: ChainRow, date: string, personId: string | null, now: Date) {
+  const slots = await executor
+    .select({ id: prayerSlots.id, startsAt: prayerSlots.startsAt, endsAt: prayerSlots.endsAt, capacity: prayerSlots.capacity })
+    .from(prayerSlots)
+    .where(and(eq(prayerSlots.prayerChainId, chain.id), eq(prayerSlots.chainDate, date), eq(prayerSlots.status, 'open')))
+    .orderBy(asc(prayerSlots.startsAt));
+
+  const holders =
+    slots.length === 0
+      ? []
+      : await executor
+          .select({
+            slotId: prayerAssignments.slotId,
+            personId: prayerAssignments.personId,
+            status: prayerAssignments.status,
+            firstName: people.firstName,
+            preferredName: people.preferredName,
+          })
+          .from(prayerAssignments)
+          .innerJoin(people, eq(people.id, prayerAssignments.personId))
+          .where(and(inArray(prayerAssignments.slotId, slots.map((s) => s.id)), inArray(prayerAssignments.status, [...HOLDS_PLACE])))
+          .orderBy(asc(prayerAssignments.createdAt));
+
+  const nowMs = now.getTime();
+  const list: PublicSlot[] = slots.map((slot) => {
+    const on = holders.filter((h) => h.slotId === slot.id);
+    const started = slot.startsAt.getTime() <= nowMs;
+    const over = slot.endsAt.getTime() <= nowMs;
+    const placesLeft = Math.max(0, slot.capacity - on.length);
+    const state: PublicSlotState =
+      on.length === 0
+        ? over
+          ? 'unfilled'
+          : started
+            ? 'open_now'
+            : 'available'
+        : over
+          ? on.some((h) => h.status === 'completed')
+            ? 'completed'
+            : 'covered'
+          : started && on.some((h) => h.status === 'in_prayer')
+            ? 'praying'
+            : 'reserved';
+    return {
+      id: slot.id,
+      label: formatSlotRange(slot.startsAt, slot.endsAt, chain.timezone),
+      startsAt: slot.startsAt,
+      endsAt: slot.endsAt,
+      state,
+      claimable: !over && placesLeft > 0,
+      placesLeft,
+      capacity: slot.capacity,
+      names: chain.showNamesPublicly ? on.map((h) => h.preferredName ?? h.firstName.split(' ')[0]!) : null,
+      mine: personId !== null && on.some((h) => h.personId === personId),
+    };
+  });
+
+  const held = (s: PublicSlot) => s.state !== 'available' && s.state !== 'open_now' && s.state !== 'unfilled';
+  return {
+    slots: list,
+    summary: {
+      total: list.length,
+      covered: list.filter(held).length,
+      available: list.filter((s) => s.claimable).length,
+      completed: list.filter((s) => s.state === 'completed').length,
+      unfilled: list.filter((s) => s.state === 'unfilled').length,
+    },
+  };
+}
+
+export const ChainPageInput = z.object({
+  code: z.string().trim().min(1).max(20),
+  /** The chain-local day being looked at; today when it is left out. */
+  date: z.iso.date().optional().catch(undefined),
+  scan: z.boolean().default(false),
+});
 
 /** The public chain page (docs/04 P6): who is praying now, today's coverage, and — for a remembered device — your slots. */
 export async function getChainPage(db: Database, raw: unknown, identity: ParticipantIdentity | null, now: Date) {
@@ -217,6 +318,9 @@ export async function getChainPage(db: Database, raw: unknown, identity: Partici
         .where(and(eq(prayerAssignments.slotId, current.id), eq(prayerAssignments.status, 'in_prayer')))
     : [];
   const coverage = await todayCoverage(db, chain, now);
+  const today = chainToday(chain, now);
+  const date = input.date ?? today;
+  const schedule = await publicSchedule(db, chain, date, identity?.personId ?? null, now);
   const [person] = identity
     ? await db.select({ firstName: people.firstName, preferredName: people.preferredName }).from(people).where(eq(people.id, identity.personId))
     : [];
@@ -233,6 +337,15 @@ export async function getChainPage(db: Database, raw: unknown, identity: Partici
         }
       : null,
     coverageToday: { covered: coverage.covered, total: coverage.total },
+    /** Every hour of the chosen day, so the gaps are visible rather than counted (docs/04 P6). */
+    schedule: {
+      date,
+      today,
+      previousDate: addDays(date, -1),
+      nextDate: addDays(date, 1),
+      selfSignup: chain.allowSelfSignup && chain.status === 'active',
+      ...schedule,
+    },
     participant:
       identity && person
         ? { firstName: person.preferredName ?? person.firstName, slots: await slotsForPerson(db, chain, identity.personId, now) }
@@ -386,6 +499,125 @@ export async function respondWithActionLink(db: Database, req: PublicRequest, ra
 export async function respondFromChainPage(db: Database, identity: ParticipantIdentity, req: PublicRequest, raw: unknown) {
   const input = parseInput(DeviceActionInput, raw);
   return respond(db, req, { kind: 'device', identity, assignmentId: input.assignmentId }, input);
+}
+
+// ─── Taking an hour (docs/05 W11 self sign-up) ────────────────────────────────
+
+export const ClaimSlotInput = z.object({
+  code: z.string().trim().min(1).max(20),
+  slotId: z.uuid(),
+  /** Set when they are moving from the hour they already hold in this chain. */
+  replaceAssignmentId: z.uuid().optional(),
+});
+
+/** The same refusals as the coordinator's, said to the person themselves. */
+const SELF_SIGNUP_MESSAGES: Record<PlacementFailure, string> = {
+  SLOT_CLOSED: 'That hour has already passed.',
+  PERSON_UNAVAILABLE: 'Please ask your prayer coordinator to help you join.',
+  ALREADY_ASSIGNED: 'You already have this hour.',
+  CAPACITY_FULL: 'Someone has just taken that hour. Please choose another one.',
+  OVERLAP: 'You are already praying at that time.',
+};
+
+export type ClaimResult =
+  | { result: 'claimed'; slot: ParticipantSlot }
+  /** They already hold an hour here, so the page offers to keep it or move. */
+  | { result: 'already_assigned'; current: ParticipantSlot };
+
+/** The hour this person holds in this chain and has not finished with yet. */
+async function heldInChain(executor: Executor, chainId: string, personId: string, now: Date) {
+  const [row] = await executor
+    .select({ id: prayerAssignments.id })
+    .from(prayerAssignments)
+    .innerJoin(prayerSlots, eq(prayerSlots.id, prayerAssignments.slotId))
+    .where(
+      and(
+        eq(prayerSlots.prayerChainId, chainId),
+        eq(prayerAssignments.personId, personId),
+        inArray(prayerAssignments.status, ['scheduled', 'confirmed', 'in_prayer']),
+        gt(prayerAssignments.endsAt, now),
+      ),
+    )
+    .orderBy(asc(prayerAssignments.startsAt))
+    .limit(1);
+  return row ? await loadAssignment(executor, row.id) : null;
+}
+
+/**
+ * Someone takes an open hour from the chain page (docs/05 W11). Every rule is the coordinator's
+ * own: `placeAssignment` decides whether the hour is open, has room, and leaves the person free,
+ * with the exclusion constraint as the last guard against two people tapping at once.
+ */
+export async function claimSlot(db: Database, identity: ParticipantIdentity, req: PublicRequest, raw: unknown): Promise<ClaimResult> {
+  const input = parseInput(ClaimSlotInput, raw);
+  if (req.ip) await assertRateLimit(db, `prayer:claim:ip:${req.ip}`, RATE_LIMITS.prayerClaimPerIp, req.now);
+  await assertRateLimit(db, `prayer:claim:person:${identity.personId}`, RATE_LIMITS.prayerClaimPerPerson, req.now);
+
+  return db.transaction(async (tx) => {
+    const code = await resolveEntryCode(tx, input.code, ['prayer_chain']);
+    if (!code?.prayerChainId || code.status !== 'active') throw notFound('prayer chain');
+    const chain = await loadChain(tx, code.prayerChainId);
+    if (!chain || chain.archivedAt) throw notFound('prayer chain');
+    if (chain.status !== 'active') throw invalidState('This prayer chain isn’t open right now.');
+    if (!chain.allowSelfSignup) throw invalidState('Hours in this chain are arranged by the prayer coordinator.');
+
+    // The hour has to belong to the chain whose code was opened.
+    const [slot] = await tx
+      .select({ id: prayerSlots.id })
+      .from(prayerSlots)
+      .where(and(eq(prayerSlots.id, input.slotId), eq(prayerSlots.prayerChainId, chain.id)));
+    if (!slot) throw notFound('prayer slot');
+
+    const held = await heldInChain(tx, chain.id, identity.personId, req.now);
+    if (held && held.assignment.id !== input.replaceAssignmentId) {
+      return { result: 'already_assigned', current: toSlot(held, req.now) };
+    }
+    if (held && held.assignment.startsAt <= req.now) {
+      throw invalidState('Your hour has already started. Please ask your coordinator if you need to change it.');
+    }
+
+    const placed = await placeAssignment(tx, {
+      slotId: input.slotId,
+      personId: identity.personId,
+      source: 'self_signup',
+      createdBy: null,
+      actor: { type: 'participant' },
+      via: 'chain_page',
+      now: req.now,
+    });
+    if (!placed.ok) throw conflict(SELF_SIGNUP_MESSAGES[placed.reason], { reason: placed.reason });
+
+    // Only once the new hour is theirs: a refusal must never leave someone with no hour at all.
+    // The status is re-checked in the UPDATE, so nothing is lost if it changed while they chose.
+    if (held) {
+      const cancelled = await tx
+        .update(prayerAssignments)
+        .set({ status: 'cancelled', updatedAt: req.now })
+        .where(and(eq(prayerAssignments.id, held.assignment.id), inArray(prayerAssignments.status, ['scheduled', 'confirmed'])))
+        .returning({ id: prayerAssignments.id });
+      if (cancelled.length > 0) {
+        await revokeAssignmentLinks(tx, held.assignment.id, req.now);
+        await recordPrayerEvent(tx, {
+          assignmentId: held.assignment.id,
+          eventType: 'cancelled',
+          actor: { type: 'participant' },
+          via: 'chain_page',
+          at: req.now,
+          note: 'Moved to another hour',
+        });
+      }
+    }
+
+    await recordAudit(tx, participantContext(req, identity.personId), {
+      category: 'change',
+      action: held ? 'prayer.slot_changed' : 'prayer.self_signed_up',
+      entityType: 'prayer_chain',
+      entityId: chain.id,
+      newValues: { assignmentId: placed.assignmentId, slotId: input.slotId, movedFrom: held?.assignment.id ?? null },
+    });
+
+    return { result: 'claimed', slot: toSlot((await loadAssignment(tx, placed.assignmentId))!, req.now) };
+  });
 }
 
 // ─── The optional report (docs/05 W12 step 6) ─────────────────────────────────

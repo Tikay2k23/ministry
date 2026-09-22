@@ -67,6 +67,7 @@ export function CreateChainForm({
       checkinOpensMinutes: 15,
       requireCheckin: false,
       showNamesPublicly: false,
+      allowSelfSignup: false,
       collectReports: true,
       repeat: 'daily',
       weekdays: [],

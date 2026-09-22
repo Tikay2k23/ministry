@@ -203,6 +203,7 @@ type ChainValues = {
   checkinOpensMinutes: number | string;
   requireCheckin: boolean;
   showNamesPublicly: boolean;
+  allowSelfSignup: boolean;
   collectReports: boolean;
 };
 
@@ -276,7 +277,7 @@ export function ChainChoicesFields() {
   const { control, register } = useFormContext<ChainValues>();
   const errorsFor = useErrorsFor();
 
-  const choice = (name: 'requireCheckin' | 'showNamesPublicly' | 'collectReports', label: string, hint: string) => (
+  const choice = (name: 'requireCheckin' | 'showNamesPublicly' | 'allowSelfSignup' | 'collectReports', label: string, hint: string) => (
     <Controller
       control={control}
       name={name}
@@ -320,6 +321,11 @@ export function ChainChoicesFields() {
       </div>
       {choice('requireCheckin', 'Ask people to check in when they start', 'Otherwise they can simply mark the slot finished.')}
       {choice('showNamesPublicly', 'Show first names on the public page', 'For example “Now praying: Mary”. Off keeps names private.')}
+      {choice(
+        'allowSelfSignup',
+        'Let people choose their own hour',
+        'The public page shows every hour, and anyone in the ministry can take one that is still open.',
+      )}
       {choice('collectReports', 'Invite a short report after each slot', 'A report, a testimony or a prayer request, which only pastors read.')}
     </div>
   );

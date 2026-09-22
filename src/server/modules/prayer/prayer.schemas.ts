@@ -89,6 +89,8 @@ export const chainShape = {
   checkinOpensMinutes: z.coerce.number().int().min(0).max(120).default(15),
   requireCheckin: z.boolean().default(false),
   showNamesPublicly: z.boolean().default(false),
+  /** People may take an open hour themselves from the chain page, rather than waiting to be asked. */
+  allowSelfSignup: z.boolean().default(false),
   collectReports: z.boolean().default(true),
 };
 

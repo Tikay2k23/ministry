@@ -58,6 +58,7 @@ export async function createChain(db: Database, ctx: RequestContext, raw: unknow
         checkinOpensMinutes: input.checkinOpensMinutes,
         requireCheckin: input.requireCheckin,
         showNamesPublicly: input.showNamesPublicly,
+        allowSelfSignup: input.allowSelfSignup,
         reportFormId,
         createdBy: actorUserId(ctx),
       })
@@ -110,6 +111,7 @@ export async function updateChain(db: Database, ctx: RequestContext, raw: unknow
       checkinOpensMinutes: input.checkinOpensMinutes,
       requireCheckin: input.requireCheckin,
       showNamesPublicly: input.showNamesPublicly,
+      allowSelfSignup: input.allowSelfSignup,
       reportFormId: input.collectReports ? (chain.reportFormId ?? (await ensurePrayerReportForm(tx))) : null,
     };
     await tx

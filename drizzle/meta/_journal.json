@@ -78,6 +78,13 @@
       "when": 1790016484953,
       "tag": "0010_journal_days_by_primary",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790094099897,
+      "tag": "0011_prayer_self_signup",
+      "breakpoints": true
     }
   ]
 }

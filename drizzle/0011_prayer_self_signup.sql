@@ -1,0 +1,1 @@
+ALTER TABLE "prayer_chains" ADD COLUMN "allow_self_signup" boolean DEFAULT false NOT NULL;
