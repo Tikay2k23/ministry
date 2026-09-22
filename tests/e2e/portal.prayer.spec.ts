@@ -60,19 +60,37 @@ test('a coordinator starts a prayer chain and assigns a member, who confirms wit
     // The chain's public page finds the same slot by mobile number and first name.
     await mobile.goto(publicUrl!);
     await expect(mobile.getByRole('heading', { name: CHAIN_NAME, exact: true })).toBeVisible();
-    await mobile.getByRole('button', { name: 'Find my slot' }).click();
+    await mobile.getByRole('button', { name: 'Find my hour' }).click();
     await mobile.getByLabel('Mobile number').fill(E2E_MEMBER.phone);
     await mobile.getByLabel('First name').fill(E2E_MEMBER.firstName);
     await mobile.waitForTimeout(HUMAN_PAUSE_MS);
     await mobile.getByRole('button', { name: 'Continue' }).click();
     await expect(mobile.getByRole('heading', { name: `Hello, ${E2E_MEMBER.firstName}!` }), await identifyProblem(mobile)).toBeVisible();
     await expect(mobile.getByText('Confirmed — thank you!')).toBeVisible();
+    // Hours are the coordinator's to give until they say otherwise.
+    await expect(mobile.getByText('arranged by the prayer coordinator')).toBeVisible();
+
+    // The coordinator opens the chain, and the same page offers the open hours.
+    await page.goto(`${page.url().replace(/[?#].*$/, '')}/setup`);
+    await page.getByLabel('Let people choose their own hour').check();
+    await page.getByRole('button', { name: 'Save details' }).click();
+    await expect(page.getByText('Saved.')).toBeVisible();
+
+    await mobile.reload();
+    await mobile.getByRole('button', { name: /Still open/ }).click();
+    await mobile.getByRole('button', { name: 'Choose this hour' }).first().click();
+    await mobile.getByRole('button', { name: 'Confirm this hour' }).click();
+
+    // They already have one, so they are offered the choice rather than given two.
+    await expect(mobile.getByText('You already have an hour in this chain')).toBeVisible();
+    await mobile.getByRole('button', { name: /^Keep / }).click();
+    await expect(mobile.getByRole('heading', { name: 'The hours' })).toBeVisible();
   } finally {
     await phone.close();
   }
 
-  // The board shows the confirmation.
-  await page.reload();
+  // The board still shows the confirmation: keeping an hour changed nothing.
+  await page.goBack();
   await expect(page.getByText('Confirmed', { exact: true })).toBeVisible();
 });
 

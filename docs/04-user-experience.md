@@ -291,11 +291,17 @@ Ministry Today · Saturday, September 12                          Scope: All min
 - **Error:** Expired/used → "This link has expired. Ask your leader for a new one."
 
 #### P6 · Prayer chain page (`/pray/{code}`)
-- **Purpose:** Show the participant their slot and the chain's life.
-- **Components:** Chain name; **Now praying** (time, first names if the chain allows); **Your next slot** card with the one action that is currently valid (Confirm / I'm praying now / I've finished); today's coverage bar ("20 of 24 hours covered"); identify prompt if unknown.
-- **Actions:** Confirm, check in, complete, can't make it.
-- **Permissions:** Public view of coverage; actions need identity.
-- **Empty:** "You don't have an upcoming slot in this chain. Your coordinator can add you." (V1: open slots to sign up for.)
+- **Purpose:** Show the whole day of the chain, so anyone can see where the gaps are and take one.
+- **Components:**
+  - Chain name and description; a day picker with the day before and after.
+  - **The hours** — every hour of the chosen day as a card: *Open* / *Open now* / *Praying now* / *Taken* / *Prayed* / *Covered* / *Not filled*, with **Choose this hour** on any that is still free. Filters: all hours · still open · my hour. Three columns on a wide screen, one on a phone.
+  - **This hour** — the running hour and who is praying, when the chain publishes first names.
+  - **Today** — covered of total with a bar, and the counts of open, prayed and not filled.
+  - **Your hour** for a remembered device: the one action that is currently valid (Confirm / I'm praying now / I've finished), or an invitation to choose one.
+- **Actions:** Take an hour (identify first if we don't know you), move to another one, confirm, check in, complete, can't make it.
+- **Permissions:** Anyone may read the day. Taking an hour needs identity and the chain's `allow_self_signup`; every rule is re-checked on the server (docs/05 W11).
+- **Privacy:** First names only, and only when the chain publishes them. An hour that ended without anyone marking it finished reads as *Covered*, never *Missed* — that judgement is the coordinator's (BR-PR-04) and stays on the board.
+- **Empty:** "There are no hours to show for this day"; with the filter on, "Every hour of this day is covered. Thank you!"
 - **Error:** Retired code → P10-style message.
 
 #### P7 · Prayer assignment (`/a/{token}`)

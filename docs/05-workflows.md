@@ -185,7 +185,7 @@ flowchart TD
 | **Recurring commitment** (primary for 24-h chains) | Coordinator: *Commitments* → person + pattern ("Tuesdays 2:00 AM", from/to) | `prayer_commitments`. Preview lists conflicts (overlapping commitments or assignments). The generation job creates assignments (`source='commitment'`) for matching slots; the exclusion constraint rejects overlaps and they are reported, never silently dropped |
 | **Manual** | Chain board → gap → *Assign* → search person (chain pool first: people with previous assignments in this chain) | Checks: slot open and in the future, capacity (`SELECT … FOR UPDATE` on the slot), person overlap (EXCLUDE), unavailability (warning). Insert `prayer_assignments` (`slot_period` copied) + event `assigned` |
 | **Links** | After assignment | `action_tokens` (`prayer_assignment`, expires at `ends_at + grace + 24 h`); notification T−24 h with the link; in the MVP the coordinator can also tap **Share** (Messenger/Viber) |
-| **Self sign-up** (V1) | Chain page → open slot → take it | Same checks; `source='self_signup'` |
+| **Self sign-up** | Chain page → an open hour → take it | The same checks, through the same `placeAssignment`; `source='self_signup'`, event `via='chain_page'`. Off per chain until `allow_self_signup` is set. Someone who already holds an upcoming hour in the chain is offered it back — keep it, or move, which only releases the old hour once the new one is theirs |
 
 ---
 
