@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { formatSlotRange } from '@/lib/time-range';
 import { sha256Hex } from '../../crypto';
 import type { Database, Executor, Transaction } from '../../db/client';
-import type { PrayerAssignmentStatus } from '../../db/enums';
+import type { PrayerAssignmentStatus, PrayerReportPhotoRule } from '../../db/enums';
 import { actionTokens, formAnswerSets, formResponses, forms, people, prayerAssignments, prayerChains, prayerSlots } from '../../db/schema';
 import { AppError, conflict, invalidState, notFound, validationError } from '../../errors';
 import { parseInput } from '../../validation';
@@ -19,6 +19,7 @@ import { recordPrayerTokenUse, resolvePrayerActionToken, revokeAssignmentLinks }
 import { todayCoverage } from './chains.service';
 import { chainToday, closePrayerFollowUp, loadChain, recordPrayerEvent, type ChainRow } from './common';
 import { HOLDS_PLACE, placeAssignment, type PlacementFailure } from './placement';
+import { assertReportPhotoPresent, attachReportPhoto, storeReportPhoto, type UploadedReportPhoto } from './report-photo.service';
 import { coordinatorUserIds } from './coordinators.service';
 import { CANNOT_MAKE_IT_LABELS, CANNOT_MAKE_IT_REASONS } from './participant-options';
 import { actionWindow, isLateCompletion, primaryAction, type AssignmentTiming } from './windows';
@@ -127,13 +128,15 @@ function toSlot(record: AssignmentRecord, now: Date): ParticipantSlot {
 export interface ReportForm {
   versionId: string;
   fields: FieldDefinition[];
+  /** Whether the chain asks for a photo of the prayer time: required, optional or off. */
+  photo: PrayerReportPhotoRule;
 }
 
 async function reportFormFor(executor: Executor, record: AssignmentRecord): Promise<ReportForm | null> {
   if (!record.chain.reportFormId) return null;
   const [form] = await executor.select({ key: forms.key }).from(forms).where(eq(forms.id, record.chain.reportFormId));
   const version = form ? await getPublishedForm(executor, form.key) : null;
-  return version ? { versionId: version.versionId, fields: version.fields } : null;
+  return version ? { versionId: version.versionId, fields: version.fields, photo: record.chain.reportPhoto } : null;
 }
 
 async function inspectLink(executor: Executor, token: string, now: Date) {
@@ -625,6 +628,8 @@ export async function claimSlot(db: Database, identity: ParticipantIdentity, req
 const ReportFields = z.object({
   answers: z.record(z.string(), z.unknown()),
   anonymous: z.boolean().default(false),
+  /** A photo already uploaded and waiting for this report. */
+  attachmentId: z.uuid().optional(),
 });
 type ReportFields = z.infer<typeof ReportFields>;
 
@@ -643,10 +648,14 @@ async function report(db: Database, req: PublicRequest, actingAs: ActingAs, inpu
     }
     const form = await reportFormFor(tx, record);
     if (!form) throw invalidState('This prayer chain doesn’t collect reports.');
+    assertReportPhotoPresent(record.chain.reportPhoto, input.attachmentId !== undefined);
 
     const outcome = validateAnswers(form.fields, input.answers);
     if (!outcome.ok) throw validationError(outcome.fieldErrors);
-    if (Object.keys(outcome.answers).length === 0) throw validationError({ _: ['Write something to share, or close this form.'] });
+    // A photo on its own is a report: someone may have nothing to write and everything to show.
+    if (Object.keys(outcome.answers).length === 0 && !input.attachmentId) {
+      throw validationError({ _: ['Write something to share, or add a photo.'] });
+    }
 
     const [response] = await tx
       .insert(formResponses)
@@ -658,6 +667,16 @@ async function report(db: Database, req: PublicRequest, actingAs: ActingAs, inpu
       answers,
     }));
     if (sets.length > 0) await tx.insert(formAnswerSets).values(sets);
+    // Inside the same transaction, so a report is never recorded with its photo half-attached.
+    if (input.attachmentId) {
+      await attachReportPhoto(tx, {
+        attachmentId: input.attachmentId,
+        assignmentId: record.assignment.id,
+        personId: record.assignment.personId,
+        responseId: response!.id,
+        now: req.now,
+      });
+    }
     await tx
       .update(prayerAssignments)
       .set({ reportResponseId: response!.id, updatedAt: req.now })
@@ -666,6 +685,45 @@ async function report(db: Database, req: PublicRequest, actingAs: ActingAs, inpu
     if (tokenId) await recordPrayerTokenUse(tx, tokenId, req.now);
     return { received: true as const };
   });
+}
+
+export const LinkPhotoInput = z.object({ token: z.string().trim().min(32).max(64) });
+export const DevicePhotoInput = z.object({ assignmentId: z.uuid() });
+
+/**
+ * Takes a photo for a report that has not been written yet. The hour it belongs to is checked
+ * first — the same link or remembered device that may write the report — so an upload can never be
+ * attached to someone else's prayer.
+ */
+async function uploadPhoto(db: Database, req: PublicRequest, actingAs: ActingAs, body: Buffer): Promise<UploadedReportPhoto> {
+  const record = await db.transaction(async (tx) => lockForParticipant(tx, actingAs, req.now));
+  if (record.record.assignment.reportResponseId) {
+    throw conflict('Thank you — your report was already received.', { reason: 'ALREADY_SUBMITTED' });
+  }
+  if (!actionWindow('report', timingOf(record.record), req.now).allowed) {
+    throw invalidState('A report can be shared for a week after you finish praying.', { reason: 'WINDOW_NOT_OPEN' });
+  }
+  return storeReportPhoto(
+    db,
+    {
+      assignmentId: record.record.assignment.id,
+      personId: record.record.assignment.personId,
+      chainDate: record.record.chainDate,
+      photoRule: record.record.chain.reportPhoto,
+    },
+    req,
+    body,
+  );
+}
+
+export async function uploadReportPhotoWithActionLink(db: Database, req: PublicRequest, raw: unknown, body: Buffer) {
+  const input = parseInput(LinkPhotoInput, raw);
+  return uploadPhoto(db, req, { kind: 'link', token: input.token }, body);
+}
+
+export async function uploadReportPhotoFromChainPage(db: Database, identity: ParticipantIdentity, req: PublicRequest, raw: unknown, body: Buffer) {
+  const input = parseInput(DevicePhotoInput, raw);
+  return uploadPhoto(db, req, { kind: 'device', identity, assignmentId: input.assignmentId }, body);
 }
 
 export async function submitReportWithActionLink(db: Database, req: PublicRequest, raw: unknown) {

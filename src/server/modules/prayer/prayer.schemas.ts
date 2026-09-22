@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { formatClockTime } from '@/lib/time-range';
-import { PRAYER_CHAIN_TYPES } from '../../db/enums';
+import { PRAYER_REPORT_PHOTO_RULES, PRAYER_CHAIN_TYPES } from '../../db/enums';
 import { describeRecurrence, parseRecurrence } from './recurrence';
 import { isValidTimeZone } from './slot-times';
 
@@ -92,6 +92,8 @@ export const chainShape = {
   /** People may take an open hour themselves from the chain page, rather than waiting to be asked. */
   allowSelfSignup: z.boolean().default(false),
   collectReports: z.boolean().default(true),
+  /** Whether a prayer report carries a photo of the prayer time. */
+  reportPhoto: z.enum(PRAYER_REPORT_PHOTO_RULES).default('optional'),
 };
 
 export function checkChainDates(value: { startsOn: string; endsOn?: string | null }, ctx: AddIssue) {

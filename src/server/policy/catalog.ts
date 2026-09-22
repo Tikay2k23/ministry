@@ -88,6 +88,7 @@ export const PERMISSIONS = {
   'prayer.resolve': { module: 'prayer', description: 'Resolve follow-ups (missed / excused / verified)', scopes: GMC },
   'prayer.reports.view': { module: 'prayer', description: 'Read prayer reports and testimonies', sensitive: true, scopes: GMC },
   'prayer.requests.confidential.view': { module: 'prayer', description: 'Read confidential prayer requests', sensitive: true, pastoral: true, scopes: G },
+  'prayer.report.attachment.view': { module: 'prayer', description: 'View photos shared with prayer reports', sensitive: true, pastoral: true, scopes: GMC },
 
   // Devotional (enforced from M4)
   // Rosters are open to anyone holding this, in any scope (docs/06 row 29, note k).
@@ -176,7 +177,7 @@ export const ROLES = {
       'journal.content.confidential.view', 'journal.proof.view', 'journal.proof.manage', 'journal.review', 'journal.excuse', 'journal.settings.manage',
       'forms.publish', 'care.view', 'care.manage', 'care.pastoral.view',
       'notes.leadership.view', 'notes.leadership.create', 'notes.pastoral.view', 'notes.pastoral.create',
-      'prayer.view', 'prayer.reports.view', 'prayer.requests.confidential.view', 'devotional.view',
+      'prayer.view', 'prayer.reports.view', 'prayer.report.attachment.view', 'prayer.requests.confidential.view', 'devotional.view',
       'reports.view', 'reports.export', 'iam.users.view', 'iam.users.manage',
       'settings.view', 'audit.view', 'audit.view.entity',
     ],
@@ -191,7 +192,7 @@ export const ROLES = {
       'journal.content.confidential.view', 'journal.proof.view', 'journal.proof.manage', 'journal.review', 'journal.excuse',
       'care.view', 'care.manage', 'care.pastoral.view',
       'notes.leadership.view', 'notes.leadership.create', 'notes.pastoral.view', 'notes.pastoral.create',
-      'prayer.view', 'prayer.reports.view', 'prayer.requests.confidential.view', 'devotional.view',
+      'prayer.view', 'prayer.reports.view', 'prayer.report.attachment.view', 'prayer.requests.confidential.view', 'devotional.view',
       'reports.view', 'audit.view.entity',
     ],
   },

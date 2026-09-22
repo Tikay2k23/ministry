@@ -50,7 +50,8 @@ describe('role bundles against the permission matrix (docs/06 §2 and §4)', () 
         'access.break_glass', 'audit.view', 'care.pastoral.view', 'iam.roles.manage', 'iam.users.manage', 'import.manage',
         'journal.content.confidential.view', 'journal.content.restricted.view', 'journal.content.view',
         'journal.proof.manage', 'journal.proof.view',
-        'notes.pastoral.create', 'notes.pastoral.view', 'people.export', 'people.merge', 'prayer.reports.view',
+        'notes.pastoral.create', 'notes.pastoral.view', 'people.export', 'people.merge',
+        'prayer.report.attachment.view', 'prayer.reports.view',
         'prayer.requests.confidential.view', 'reports.export', 'settings.manage',
       ].sort(),
     );
@@ -58,7 +59,8 @@ describe('role bundles against the permission matrix (docs/06 §2 and §4)', () 
       [
         'care.pastoral.view', 'journal.content.confidential.view', 'journal.content.restricted.view', 'journal.content.view',
         'journal.proof.manage', 'journal.proof.view',
-        'notes.pastoral.create', 'notes.pastoral.view', 'prayer.requests.confidential.view',
+        'notes.pastoral.create', 'notes.pastoral.view',
+        'prayer.report.attachment.view', 'prayer.requests.confidential.view',
       ].sort(),
     );
   });

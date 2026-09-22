@@ -85,6 +85,13 @@
       "when": 1790094099897,
       "tag": "0011_prayer_self_signup",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790101790896,
+      "tag": "0012_prayer_report_photo",
+      "breakpoints": true
     }
   ]
 }

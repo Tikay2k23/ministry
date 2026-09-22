@@ -47,3 +47,8 @@ export function setStorage(custom: Storage | undefined): void {
 export function proofPath(personId: string, journalDate: string, id: string, extension: string): string {
   return `${personId}/${journalDate}/${id}.${extension}`;
 }
+
+/** Prayer report photos share the bucket, under their own prefix. The path still names nobody. */
+export function prayerReportPath(personId: string, chainDate: string, id: string, extension: string): string {
+  return `prayer-report/${personId}/${chainDate}/${id}.${extension}`;
+}

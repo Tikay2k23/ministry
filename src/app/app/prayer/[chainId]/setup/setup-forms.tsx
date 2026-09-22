@@ -531,6 +531,7 @@ export interface ChainDetails {
   showNamesPublicly: boolean;
   allowSelfSignup: boolean;
   collectsReports: boolean;
+  reportPhoto: 'required' | 'optional' | 'off';
 }
 
 export function EditChainForm({
@@ -561,6 +562,7 @@ export function EditChainForm({
       requireCheckin: chain.requireCheckin,
       showNamesPublicly: chain.showNamesPublicly,
       allowSelfSignup: chain.allowSelfSignup,
+      reportPhoto: chain.reportPhoto,
       collectReports: chain.collectsReports,
     },
     action: (values) => updateChainAction({ chainId: chain.id, ...values }),

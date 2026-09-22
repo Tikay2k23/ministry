@@ -68,6 +68,7 @@ export function CreateChainForm({
       requireCheckin: false,
       showNamesPublicly: false,
       allowSelfSignup: false,
+      reportPhoto: 'optional' as const,
       collectReports: true,
       repeat: 'daily',
       weekdays: [],

@@ -33,6 +33,9 @@ export const RATE_LIMITS = {
   prayerClaimPerIp: { limit: 20, windowSeconds: 15 * 60 },
   prayerClaimPerPerson: { limit: 10, windowSeconds: 60 * 60 },
   prayerReportPerIp: { limit: 10, windowSeconds: 60 * 60 },
+  /** Prayer report photos: its own budget, so a retry here never spends the journal’s. */
+  reportPhotoPerPerson: { limit: 10, windowSeconds: 15 * 60 },
+  reportPhotoPerIp: { limit: 60, windowSeconds: 15 * 60 },
   servingRespondPerIp: { limit: 60, windowSeconds: 15 * 60 },
 } satisfies Record<string, RateLimitRule>;
 

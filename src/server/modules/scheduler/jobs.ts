@@ -1,6 +1,7 @@
 import { sendServingReminders } from '../devotional/devotional-jobs.service';
 import { generateUpcomingGatherings } from '../devotional/generation.service';
 import { ensureJournalLedger } from '../journal/ledger.service';
+import { cleanupAbandonedReportPhotos } from '../prayer/report-photo.service';
 import { cleanupAbandonedProofs } from '../journal/proof.service';
 import { deliverDueNotifications } from '../notifications/delivery.service';
 import { generateUpcomingSlots } from '../prayer/generation.service';
@@ -35,5 +36,6 @@ export const JOBS: readonly JobDefinition[] = [
   // Photos uploaded by someone who then never sent their journal, and proofs an administrator
   // removed. Only files nobody references: a journal's own proof is kept (docs/03 §9 retention).
   { key: 'journal.proof_cleanup', label: 'Clearing unused journal photos', everyMinutes: 60, run: cleanupAbandonedProofs },
+  { key: 'prayer.report_photo_cleanup', label: 'Clearing unused prayer photos', everyMinutes: 60, run: cleanupAbandonedReportPhotos },
   { key: 'notifications.deliver', label: 'Sending emails and notices', everyMinutes: 1, run: deliverDueNotifications },
 ];

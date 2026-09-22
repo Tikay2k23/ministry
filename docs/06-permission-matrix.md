@@ -93,6 +93,7 @@ Scope: **G** global · **B** own branch (self + downline) · **D** own direct gr
 - **h** — Coordinators see reports for their chains, excluding confidential fields and anonymous identities.
 - **i** — Super Admins may assign any role. Assignments that include pastoral permissions notify all Pastors immediately and appear in the quarterly access review.
 - **j** — *Leader directory (implemented in M1).* Anyone with `people.view` can find, **by name only**, leaders who receive new people (`accepts_members`). This is the same information the public leader selector will show (FR-JRN-05), and it lets a leader request a transfer to a leader outside their own scope. No contact details, group members or journal data are exposed.
+- **n** — *Prayer report photos (M3 extension, 2026-09-23).* A photo shared with a prayer report is a separate permission (`prayer.report.attachment.view`) from the words of the report, so a coordinator can see that someone prayed and read their testimony without the ministry having decided they may look at the picture. It is pastoral, so by note c a prayer chain coordinator does not hold it: they run the chain and read the report, while the picture stays with pastors and pastoral care. An anonymous report hides its photo exactly as it hides its author.
 - **m** — *Journal proof photos (M2 extension, 2026-09-21).* A photo of a written journal is a separate permission (`journal.proof.view`) from the typed answers, so the ministry can decide separately who reads words and who sees handwriting. It is granted to the same people as standard content by default: pastors and pastoral care ministry-wide, a leader and Primary Leader for their own direct group. Removing a photo (`journal.proof.manage`) is pastoral and global, so it is not something a leader — or the Super Admin, who holds no pastoral content — can do.
 - **k** — *Devotional scope (implemented in M4).*
   - **Seeing:** a `devotional.view` grant in any scope shows every gathering and roster (row 29 "V"), because rosters are shared openly in the ministry.
@@ -128,6 +129,7 @@ Scope: **G** global · **B** own branch (self + downline) · **D** own direct gr
 | Journal **confidential** content | ❌ ("1 private answer shared with the pastoral team") | ❌ | ✅ | ✅ | ❌ | ❌ ᶜ | ❌ |
 | Leader review comments | ✅ own | ✅ own group | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Prayer reports / testimonies | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ✅ own chains (non-confidential) |
+| Prayer report photos (note n) | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Confidential prayer requests, anonymous identity | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Pastoral notes | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Contact details | ✅ group | ✅ branch | ✅ | ✅ | ✅ | ✅ | ✅ participants in scope |
@@ -147,7 +149,7 @@ Every ✅ in the content rows is logged in the access log. Every role with a con
 | Ministries | `ministries.view` · `ministries.manage` · `ministry.structure.manage` · `ministry.members.manage` |
 | Journal | `journal.status.view` · `journal.content.view` ⚠✝ · `journal.content.restricted.view` ⚠✝ · `journal.content.confidential.view` ⚠✝ · `journal.proof.view` ⚠✝ · `journal.proof.manage` ⚠✝ · `journal.review` · `journal.proxy_submit` · `journal.excuse` · `journal.settings.manage` · `forms.manage` · `forms.publish` |
 | Care & notes | `care.view` · `care.manage` · `care.pastoral.view` ⚠✝ · `notes.leadership.view` · `notes.leadership.create` · `notes.pastoral.view` ⚠✝ · `notes.pastoral.create` ⚠✝ |
-| Prayer | `prayer.view` · `prayer.manage` · `prayer.assign` · `prayer.resolve` · `prayer.reports.view` ⚠ · `prayer.requests.confidential.view` ⚠✝ |
+| Prayer | `prayer.view` · `prayer.manage` · `prayer.assign` · `prayer.resolve` · `prayer.reports.view` ⚠ · `prayer.report.attachment.view` ⚠✝ · `prayer.requests.confidential.view` ⚠✝ |
 | Devotional | `devotional.view` · `devotional.manage` · `devotional.teams.manage` |
 | Reports | `reports.view` · `reports.export` ⚠ |
 | Links | `links.manage` · `links.own.manage` |

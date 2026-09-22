@@ -4,6 +4,7 @@ import {
   check,
   date,
   index,
+  integer,
   pgTable,
   smallint,
   text,
@@ -16,12 +17,15 @@ import {
 import { createdAt, oneOf, pk, tstz, updatedAt } from '../columns';
 import {
   ACTOR_TYPES,
+  ATTACHMENT_MIME_TYPES,
+  ATTACHMENT_STATUSES,
   PRAYER_ASSIGNMENT_SOURCES,
   PRAYER_ASSIGNMENT_STATUSES,
   PRAYER_CHAIN_STATUSES,
   PRAYER_CHAIN_TYPES,
   PRAYER_EVENT_TYPES,
   PRAYER_EVENT_VIA,
+  PRAYER_REPORT_PHOTO_RULES,
   PRAYER_SLOT_STATUSES,
 } from '../enums';
 import { formResponses, forms } from './forms';
@@ -55,6 +59,8 @@ export const prayerChains = pgTable(
     showNamesPublicly: boolean('show_names_publicly').notNull().default(false),
     /** People may take an open hour themselves from the chain page (docs/05 W11 self sign-up). */
     allowSelfSignup: boolean('allow_self_signup').notNull().default(false),
+    /** Whether a prayer report carries a photo of the prayer time: required, optional or off. */
+    reportPhoto: text('report_photo', { enum: PRAYER_REPORT_PHOTO_RULES }).notNull().default('optional'),
     /** NULL = no report form after completing a slot. */
     reportFormId: uuid('report_form_id').references((): AnyPgColumn => forms.id),
     archivedAt: tstz('archived_at'),
@@ -69,6 +75,7 @@ export const prayerChains = pgTable(
     check('prayer_chains_grace_range', sql`grace_minutes BETWEEN 0 AND 240`),
     check('prayer_chains_checkin_range', sql`checkin_opens_minutes BETWEEN 0 AND 120`),
     check('prayer_chains_name_length', sql`length(btrim(name)) BETWEEN 1 AND 120`),
+    check('prayer_chains_report_photo_check', oneOf('report_photo', PRAYER_REPORT_PHOTO_RULES)),
   ],
 );
 
@@ -231,5 +238,57 @@ export const prayerAssignmentEvents = pgTable(
     check('prayer_events_actor_check', oneOf('actor_type', ACTOR_TYPES)),
     check('prayer_events_via_check', sql`via IS NULL OR ${oneOf('via', PRAYER_EVENT_VIA)}`),
     index('prayer_events_by_assignment').on(t.assignmentId, t.occurredAt),
+  ],
+);
+
+/**
+ * A photo shared with a prayer report (docs/02 §4 "Prayer report photos"). The same shape and the
+ * same pipeline as a journal's proof photo — decoded to prove what it is, re-encoded so no EXIF
+ * survives, kept in a private bucket under a path that names nobody — but with its own foreign key
+ * to the report it belongs to, which a shared table could not have.
+ */
+export const prayerReportAttachments = pgTable(
+  'prayer_report_attachments',
+  {
+    id: pk(),
+    /** The hour it was taken for. Known from the moment it is uploaded, before any report exists. */
+    assignmentId: uuid('assignment_id')
+      .notNull()
+      .references((): AnyPgColumn => prayerAssignments.id),
+    /** NULL until the report it belongs to is submitted. */
+    responseId: uuid('response_id').references((): AnyPgColumn => formResponses.id, { onDelete: 'cascade' }),
+    personId: uuid('person_id')
+      .notNull()
+      .references((): AnyPgColumn => people.id),
+    status: text('status', { enum: ATTACHMENT_STATUSES }).notNull().default('pending'),
+    storageBucket: text('storage_bucket').notNull(),
+    /** Server-generated, never a name the browser chose (docs/02 §8 "Uploads"). */
+    storagePath: text('storage_path').notNull(),
+    mimeType: text('mime_type', { enum: ATTACHMENT_MIME_TYPES }).notNull(),
+    fileSizeBytes: integer('file_size_bytes').notNull(),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    /** SHA-256 of the stored bytes: proves the file was not swapped underneath the row. */
+    checksum: text('checksum').notNull(),
+    createdAt: createdAt(),
+    attachedAt: tstz('attached_at'),
+    removedAt: tstz('removed_at'),
+    removedBy: uuid('removed_by').references((): AnyPgColumn => users.id),
+    /** When the file itself was deleted. The row stays, so the record still shows it existed. */
+    deletedFileAt: tstz('deleted_file_at'),
+  },
+  (t) => [
+    check('prayer_report_attachments_status_check', oneOf('status', ATTACHMENT_STATUSES)),
+    check('prayer_report_attachments_mime_check', oneOf('mime_type', ATTACHMENT_MIME_TYPES)),
+    check('prayer_report_attachments_size', sql`file_size_bytes > 0`),
+    // A photo waiting for its report has none; an attached one knows which report and when. A
+    // removed one keeps both, so the record still shows which report it was taken off.
+    check('prayer_report_attachments_pending_unattached', sql`status <> 'pending' OR (response_id IS NULL AND attached_at IS NULL)`),
+    check('prayer_report_attachments_attached_complete', sql`status <> 'attached' OR (response_id IS NOT NULL AND attached_at IS NOT NULL)`),
+    unique('prayer_report_attachments_path').on(t.storageBucket, t.storagePath),
+    // One live photo per report, without stopping a replaced one from staying on the record.
+    uniqueIndex('prayer_report_attachments_one_photo').on(t.responseId).where(sql`status = 'attached'`),
+    // The cleanup job's query: pending uploads, oldest first.
+    index('prayer_report_attachments_pending').on(t.createdAt).where(sql`status = 'pending'`),
   ],
 );

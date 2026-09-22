@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Controller, get, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { Checkbox } from '@/components/ui/checkbox';
+import { SelectField } from '@/components/ui/select-field';
 import { Field, inputClassName } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
 import { formatSlotRange } from '@/lib/time-range';
@@ -205,6 +206,7 @@ type ChainValues = {
   showNamesPublicly: boolean;
   allowSelfSignup: boolean;
   collectReports: boolean;
+  reportPhoto: 'required' | 'optional' | 'off';
 };
 
 export function ChainBasicsFields({
@@ -327,6 +329,17 @@ export function ChainChoicesFields() {
         'The public page shows every hour, and anyone in the ministry can take one that is still open.',
       )}
       {choice('collectReports', 'Invite a short report after each slot', 'A report, a testimony or a prayer request, which only pastors read.')}
+      <SelectField
+        label="A photo with the report"
+        hint="A picture from their prayer time. Only pastors and pastoral care ever see it."
+        options={[
+          { value: 'optional', label: 'Invited, but not needed' },
+          { value: 'required', label: 'Asked for with every report' },
+          { value: 'off', label: 'Not collected' },
+        ]}
+        {...register('reportPhoto')}
+        errors={errorsFor('reportPhoto')}
+      />
     </div>
   );
 }

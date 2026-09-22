@@ -130,6 +130,8 @@ export const PRAYER_EVENT_TYPES = [
   'report_submitted',
 ] as const;
 export const PRAYER_EVENT_VIA = ['action_link', 'chain_page', 'portal', 'job'] as const;
+/** Whether a prayer report carries a photo of the prayer time (per chain). */
+export const PRAYER_REPORT_PHOTO_RULES = ['required', 'optional', 'off'] as const;
 export const NOTIFICATION_STATUSES = ['pending', 'processing', 'sent', 'partially_sent', 'failed', 'suppressed', 'cancelled'] as const;
 export const NOTIFICATION_CHANNELS = ['in_app', 'email', 'sms', 'push'] as const;
 export const DELIVERY_STATUSES = ['queued', 'sent', 'delivered', 'failed', 'bounced'] as const;
@@ -155,6 +157,7 @@ export type PrayerChainType = (typeof PRAYER_CHAIN_TYPES)[number];
 export type PrayerChainStatus = (typeof PRAYER_CHAIN_STATUSES)[number];
 export type PrayerAssignmentStatus = (typeof PRAYER_ASSIGNMENT_STATUSES)[number];
 export type PrayerEventType = (typeof PRAYER_EVENT_TYPES)[number];
+export type PrayerReportPhotoRule = (typeof PRAYER_REPORT_PHOTO_RULES)[number];
 
 export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
 export type Sensitivity = (typeof SENSITIVITIES)[number];
