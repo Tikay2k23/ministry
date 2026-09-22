@@ -1,4 +1,5 @@
 import { uploadReportPhotoFromChainPage, uploadReportPhotoWithActionLink } from '@/server/modules/prayer/participation.service';
+import { assertFormSession } from '@/server/modules/public/participants.service';
 import { publicJsonRoute } from '@/server/next/public-route';
 
 /**
@@ -10,6 +11,7 @@ import { publicJsonRoute } from '@/server/next/public-route';
 export const POST = publicJsonRoute(
   async ({ db, req, upload, requireIdentity }) => {
     const { bytes, fields } = await upload('photo');
+    assertFormSession(fields.formSession ?? null, req.now);
     if (typeof fields.token === 'string') return uploadReportPhotoWithActionLink(db, req, fields, bytes);
     return uploadReportPhotoFromChainPage(db, await requireIdentity(), req, fields, bytes);
   },

@@ -307,7 +307,8 @@ Ministry Today · Saturday, September 12                          Scope: All min
 #### P7 · Prayer assignment (`/a/{token}`)
 - **Purpose:** Act on one slot without login.
 - **Components:** Slot card: chain, local date and time (both dates shown if crossing midnight), state; **one primary button** appropriate to the window (Confirm → "I'm praying now" → "I've finished praying"); after completion, a collapsed *"Share a prayer report or testimony (optional)"* form; secondary link "I can't make it" (reason select + note).
-- **Actions:** Confirm, check in, complete (+ report), can't make it.
+- **The report card**, once the hour is finished: the three questions the ministry publishes (a report, a testimony, and a prayer request only pastors read), a photo from the prayer time when the chain asks for one — camera or gallery, sent as it is chosen — and "Share without my name". Nothing in the card decides what is asked; the wording comes from the form.
+- **Actions:** Confirm, check in, complete (+ report with an optional photo), can't make it.
 - **Loading/Error:** Button states; outside window → "You can confirm until 2:00 AM" / "Check-in opens at 1:45 AM"; cancelled or replaced → "This slot has been reassigned — thank you!"
 
 #### P8 · Serving assignment (`/a/{token}`)

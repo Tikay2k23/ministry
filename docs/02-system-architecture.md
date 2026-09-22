@@ -253,6 +253,12 @@ Request arrives at /j or /j/{code}
 - **Private, and only ever briefly.** The bucket is private; a viewer gets a link that stops working after a minute, made only after the policy layer agrees. Nothing public or permanent is ever stored in the database — only where the file is and what it is.
 - **Who may look** is `journal.proof.view`, separate from reading the typed answers (docs/06 rows 15a–15b, note m). Removing a photo is `journal.proof.manage`, which is pastoral and global.
 - **Journals recorded by a leader over the phone** (`journal.proxy_submit`) are not asked for a photo: the person is not holding the notebook.
+**Implementation note (2026-09-23): prayer report photos.** Someone who finishes an hour of prayer may send a picture from that time with their report. It is the same pipeline as the journal's proof photo — one module now (`src/server/storage/images.ts`) serving both — with the same limits, the same decoding to prove what the bytes are, the same re-encode to WebP that drops EXIF, the same private bucket under `prayer-report/{personId}/{date}/{id}.webp`, and the same minute-long signed links.
+
+- **Each chain decides** whether to ask for one: `prayer_chains.report_photo` is `required`, `optional` (the default) or `off`. Required means a report must carry one; nobody is stopped from sharing a testimony because they had nothing to photograph at three in the morning.
+- **Its own row, its own key.** `prayer_report_attachments` points at the `form_responses` row the report is, not at a table of its own — the report stays a versioned form with its answers split by sensitivity, which is what keeps a prayer request from a leader. The photo is `pending` until the report's transaction attaches it, and the hourly `prayer.report_photo_cleanup` job deletes what was never used.
+- **Who may look** is `prayer.report.attachment.view`, separate from reading the words (docs/06 note n). It is pastoral, so a prayer chain coordinator runs the chain and reads the testimony without it. An anonymous report hides its photo exactly as it hides its author.
+
 - **Storage drivers** follow the same shape as the email providers: `STORAGE_DRIVER=local` writes to a directory in development and tests, `supabase` uses the private bucket in production. Local links are served by `/api/journal/proof/file`, which checks the same signature and expiry Supabase would, so development behaves like production instead of pretending files are public.
 
 ---
