@@ -189,20 +189,27 @@ jobs:
 
       # Kept, so the step below can say where the run had got to. Job logs need authentication to
       # read; annotations don't.
+      #
+      # The heap ceiling is for `next dev`: Turbopack will grow until the machine complains, and
+      # this job has been killed outright four times — every step after it, including the post
+      # steps that always run, marked skipped, which only happens when the runner itself goes away.
+      # A ceiling makes it collect garbage instead of asking for more.
       - name: Run the end-to-end tests
+        id: e2e
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: |
           set -o pipefail
           npm run test:e2e 2>&1 | tee e2e.log
 
-      # This job has been killed mid-run three times with every test passing locally, and each time
-      # the log said only "The operation was canceled". A runner holds Chromium, `next dev` and an
-      # embedded PostgreSQL at once, so running out of memory is the first suspect — but the point
-      # of this step is to stop guessing.
+      # When the job survives long enough to run this, it says what the machine looked like and
+      # where the run had reached. One run that did reach it showed 12.5 GB free, which is what
+      # ruled memory out as the whole story.
       #
-      # `if: failure()` is not enough: a killed step is *cancelled*, which is neither failure() nor
-      # cancelled() (that one means the whole run was cancelled). `!success()` covers both.
+      # `always()` and nothing less: a job that is being torn down skips every step whose condition
+      # is anything else, which is how the first four of these kills left no explanation at all.
       - name: Why did it stop?
-        if: ${{ !success() }}
+        if: ${{ always() && steps.e2e.outcome != 'success' }}
         run: |
           echo "::notice title=E2E memory::$(free -m | sed -n 2p)"
           echo "::notice title=E2E disk::$(df -h / | sed -n 2p)"
@@ -215,7 +222,7 @@ jobs:
           if [ -n "$killed" ]; then echo "::error title=E2E killed by the kernel::$killed"; fi
 
       - uses: actions/upload-artifact@v4
-        if: ${{ !success() }}
+        if: ${{ always() && steps.e2e.outcome != 'success' }}
         with:
           name: playwright-report
           path: playwright-report
