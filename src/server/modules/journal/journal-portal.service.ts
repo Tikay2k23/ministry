@@ -216,7 +216,14 @@ export async function getJournalOverview(db: Database, ctx: RequestContext, raw:
   // One card per Primary Leader, for the overview at the top of the page. The ledger's own branch
   // snapshot means this is a single grouped read, whatever the size of the ministry, and it stays
   // correct for past days after someone moves between branches.
-  const branchRows = await queryRows<{
+  //
+  // Not for a leader looking at their own group, though. The cards are how you move *between*
+  // branches, and the page only draws them when there is more than one; for someone inside a
+  // single branch they are never seen. Reading them anyway costs the permission check once per
+  // person in the day — 50,083 index probes and 1.2 seconds at ministry scale, which is what the
+  // query-plan job caught. A branch chosen by name still needs them, to know it may be opened.
+  const wantsCards = !leaderId || input.primaryLeaderId !== undefined;
+  const branchRows = !wantsCards ? [] : await queryRows<{
     id: string;
     first_name: string;
     last_name: string;
